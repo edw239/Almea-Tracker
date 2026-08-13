@@ -2,5 +2,5 @@ services:
   - type: web
     name: almea-tracker
     runtime: static
-    buildCommand: npm --prefix web ci && npm --prefix web run build
+    buildCommand: npm --prefix web install && npm --prefix web run build
     staticPublishPath: web/dist
