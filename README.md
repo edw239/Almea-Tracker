@@ -29,6 +29,20 @@ ClickUp-Light **Work Management** для Almea: Spaces → Folders → Lists →
 | API contract | OpenAPI с первого PR |
 | Auth | Host / shared auth Almea (TBD) |
 
+## Демо (без бэкенда)
+
+Кликабельный прототип «глазами CEO»: My Work, неделя, inbox, spaces, lists, доска/таблица/календарь, карточка задачи. Данные в `localStorage` браузера.
+
+```bash
+cd web
+npm install
+npm run dev
+```
+
+Откроется `http://localhost:5173`. Для проверки production-сборки: `npm run build && npm run preview`.
+
+Статический деплой на Render: корень репозитория, команда `npm --prefix web ci && npm --prefix web run build`, publish path `web/dist`. Маршруты через HashRouter (`#/inbox`), без rewrite-правил.
+
 ## Статус
 
-Репозиторий инициализирован документацией и планом. Код ядра ещё не начат — см. [план разработки](docs/DEVELOPMENT_PLAN.md).
+Есть фронт-демо и план ядра. Backend ещё не начат — см. [план разработки](docs/DEVELOPMENT_PLAN.md).
