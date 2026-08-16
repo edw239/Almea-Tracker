@@ -86,7 +86,12 @@ export function ListPage() {
                   {tasks
                     .filter((task) => task.listStatusId === column.id)
                     .map((task) => (
-                      <button key={task.id} type="button" className="kanban-card" onClick={() => openTask(task.id)}>
+                      <button
+                        key={task.id}
+                        type="button"
+                        className={`kanban-card ${task.id === selectedId ? 'active' : ''}`}
+                        onClick={() => openTask(task.id)}
+                      >
                         <strong>{task.title}</strong>
                         <p>{task.domainLabel ?? '—'}</p>
                       </button>

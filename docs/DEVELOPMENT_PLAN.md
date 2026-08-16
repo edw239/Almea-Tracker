@@ -18,6 +18,7 @@
 - [x] Репозиторий `Almea-Tracker`
 - [x] Порт гайда в `docs/task-tracker-principles.md`
 - [x] Этот план
+- [x] Дизайн-система v1: [DESIGN_SYSTEM.md](./DESIGN_SYSTEM.md) (белый/серый/чёрный + лайм)
 - [ ] Согласовать стек (NestJS/Prisma vs альтернатива) и auth Almea
 - [ ] Зафиксировать Host Plugin: что за `domain_entity_id` (project / deal / …)
 - [ ] Язык UI (RU/EN) и seed-названия статусов

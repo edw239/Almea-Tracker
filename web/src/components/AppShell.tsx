@@ -34,11 +34,11 @@ export function AppShell() {
           </NavLink>
           <NavLink to="/overdue" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
             Просрочено
-            <span className="nav-count">{overdue}</span>
+            {overdue > 0 ? <span className="nav-count alert">{overdue}</span> : null}
           </NavLink>
           <NavLink to="/inbox" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
             Inbox
-            <span className="nav-count">{unread}</span>
+            {unread > 0 ? <span className="nav-count alert">{unread}</span> : <span className="nav-count">0</span>}
           </NavLink>
           <NavLink to="/favorites" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
             Избранное
@@ -49,7 +49,7 @@ export function AppShell() {
           <div className="nav-label">Пространства</div>
           {spaces.map(({ space, folders, lists }) => (
             <div key={space.id}>
-              <NavLink to={`/spaces/${space.id}`} className="tree-space">
+              <NavLink to={`/spaces/${space.id}`} className={({ isActive }) => `tree-space ${isActive ? 'active' : ''}`}>
                 {space.name}
               </NavLink>
               {lists

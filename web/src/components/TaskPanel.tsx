@@ -24,9 +24,7 @@ export function TaskPanel({ task, onClose }: { task: Task; onClose?: () => void 
       <div className="panel-head">
         <div>
           <div className="kicker">{list?.name}</div>
-          <h2 className="task-title" style={{ fontSize: 22, letterSpacing: '-0.03em' }}>
-            {task.title}
-          </h2>
+          <h2 className="panel-title">{task.title}</h2>
           {blocked ? <p className="blocked">Заблокирована входящей связью BLOCKS</p> : null}
         </div>
         <div className="top-actions">
@@ -44,7 +42,7 @@ export function TaskPanel({ task, onClose }: { task: Task; onClose?: () => void 
               ×
             </button>
           ) : (
-            <Link className="icon-btn" to="/" aria-label="Назад" style={{ display: 'grid', placeItems: 'center' }}>
+            <Link className="icon-btn" to="/" aria-label="Назад">
               ×
             </Link>
           )}
@@ -111,8 +109,7 @@ export function TaskPanel({ task, onClose }: { task: Task; onClose?: () => void 
               <button
                 key={user.id}
                 type="button"
-                className={`chip ${on ? '' : ''}`}
-                style={on ? { background: 'var(--cta)', color: 'var(--cta-text)', borderColor: 'var(--cta)' } : undefined}
+                className={`chip ${on ? 'on' : ''}`}
                 onClick={() => store.dispatch({ type: 'TOGGLE_ASSIGNEE', taskId: task.id, userId: user.id })}
               >
                 {user.name}

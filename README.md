@@ -8,6 +8,7 @@ ClickUp-Light **Work Management** для Almea: Spaces → Folders → Lists →
 
 | Документ | Назначение |
 | -------- | ---------- |
+| [docs/DESIGN_SYSTEM.md](docs/DESIGN_SYSTEM.md) | Визуальный контракт: цвет, шрифт, форма, компоненты |
 | [docs/task-tracker-principles.md](docs/task-tracker-principles.md) | Полный гайд: модель, dual status, ACL, API, фазы, антипаттерны |
 | [docs/DEVELOPMENT_PLAN.md](docs/DEVELOPMENT_PLAN.md) | План разработки Almea Tracker по фазам |
 
