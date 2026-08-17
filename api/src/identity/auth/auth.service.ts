@@ -46,10 +46,12 @@ export class AuthService {
 
   private cookieOptions(): CookieOptions {
     const ttlSeconds = parseDurationToSeconds(this.config.get('JWT_EXPIRES_IN', { infer: true }));
+    const isProd = this.config.get('NODE_ENV', { infer: true }) === 'production';
+    // Static UI and API are on different onrender.com hosts — Lax would drop the cookie.
     return {
       httpOnly: true,
-      secure: this.config.get('NODE_ENV', { infer: true }) === 'production',
-      sameSite: 'lax',
+      secure: isProd,
+      sameSite: isProd ? 'none' : 'lax',
       path: AUTH_COOKIE_PATH,
       maxAge: ttlSeconds * 1000,
     };

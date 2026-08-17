@@ -62,4 +62,14 @@ npm run dev
 
 Откроется `http://localhost:5173`, вход `#/login`. Маршруты через HashRouter (`#/lists/...`) — удобно для статического деплоя.
 
+### Render (prod)
+
+| Сервис | URL |
+| ------ | --- |
+| UI (static) | https://almea-track.onrender.com |
+| API | https://almea-tracker-api.onrender.com (`/api`, OpenAPI `/api/docs`) |
+
+Env API: `DATABASE_URL`, `JWT_SECRET` (≥32), `WEB_ORIGIN=https://almea-track.onrender.com`, `SEED_ADMIN_*`.  
+UI build: `VITE_API_URL=https://almea-tracker-api.onrender.com`. Cookie в production: `SameSite=None; Secure` (разные хосты onrender).
+
 Подробнее — [web/README.md](web/README.md).

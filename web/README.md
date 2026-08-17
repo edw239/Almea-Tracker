@@ -62,4 +62,9 @@ npm run dev
 | `store.tsx` | состояние + optimistic status/move с rollback |
 | `App.tsx` | `HashRouter` (`#/lists/...`) для статического деплоя |
 
-Дизайн: [docs/DESIGN_SYSTEM.md](../docs/DESIGN_SYSTEM.md).
+Дизайн: [docs/DESIGN_SYSTEM.md](../DESIGN_SYSTEM.md).
+
+## Render
+
+Static: https://almea-track.onrender.com — при билде нужен `VITE_API_URL` на API.  
+API: https://almea-tracker-api.onrender.com — CORS `WEB_ORIGIN` = origin static site.

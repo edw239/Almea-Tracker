@@ -1,6 +1,63 @@
+# Almea Tracker on Render (My Workspace / Frankfurt)
+# Existing static site: almea-track → https://almea-track.onrender.com
+# Blueprint documents intended topology; live services are also managed via dashboard/MCP.
+
+databases:
+  - name: almea-tracker-db
+    plan: basic-256mb
+    region: frankfurt
+    postgresMajorVersion: "17"
+
 services:
   - type: web
-    name: almea-tracker
+    name: almea-tracker-api
+    runtime: node
+    plan: starter
+    region: frankfurt
+    branch: main
+    autoDeploy: true
+    healthCheckPath: /api/health
+    buildCommand: NPM_CONFIG_PRODUCTION=false npm --prefix api ci && npm --prefix api exec prisma generate && npm --prefix api run build
+    startCommand: npm --prefix api exec prisma migrate deploy && npm --prefix api run prisma:seed && npm --prefix api run start:prod
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "10000"
+      - key: APP_URL
+        value: https://almea-tracker-api.onrender.com
+      - key: WEB_ORIGIN
+        value: https://almea-track.onrender.com
+      - key: JWT_EXPIRES_IN
+        value: 8h
+      - key: JWT_SECRET
+        generateValue: true
+      - key: SEED_ADMIN_EMAIL
+        value: ceo@almea.local
+      - key: SEED_ADMIN_NAME
+        value: Эдуард
+      - key: SEED_ADMIN_PASSWORD
+        sync: false
+      - key: DATABASE_URL
+        fromDatabase:
+          name: almea-tracker-db
+          property: connectionString
+
+  - type: web
+    name: almea-track
     runtime: static
+    branch: main
+    autoDeploy: true
     buildCommand: npm --prefix web install && npm --prefix web run build
     staticPublishPath: web/dist
+    headers:
+      - path: /*
+        name: Cache-Control
+        value: public, max-age=0, must-revalidate
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: VITE_API_URL
+        value: https://almea-tracker-api.onrender.com
