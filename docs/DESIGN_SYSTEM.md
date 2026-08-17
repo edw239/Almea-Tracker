@@ -5,7 +5,7 @@
 | **Статус** | Approved v1 |
 | **Дата** | 2026-08-17 |
 | **Продукт** | Внутренний Work Management, не маркетинговый сайт |
-| **Цвет** | Брендбук ALMEA + правило частоты (белый / серый / чёрный / лайм) |
+| **Цвет** | Брендбук ALMEA + Moss с Almea Web + правило частоты (белый / серый / чёрный / лайм / тихий зелёный) |
 | **Форма, шрифт, компоненты** | [Almea Web](https://almea-web.onrender.com/) |
 | **Реализация** | `web/src/styles.css`, `web/index.html` |
 
@@ -21,9 +21,9 @@ Almea Web — белый, чёрный, серый, спокойный мини�
 | ------- | ---- | ----- |
 | Постоянно | Холст и хром | **Белый**, **серый**, **чёрный** (Black Forest) |
 | Контраст | Акцент, фокус, «сейчас» | **Lemon** `#E7FC95` |
-| Иногда | Фирменная поддержка | Dusty Olive, Beige |
+| Иногда | Фирменная поддержка | **Moss**, Dusty Olive, Beige |
 
-Lemon не заменяет primary-кнопку и не красится в фон экрана. Олива и беж не становятся темой приложения.
+Lemon не заменяет primary-кнопку и не красится в фон экрана. Олива, беж и Moss не становятся темой приложения.
 
 **Почему так:** трекер смотрят часами. Маркетинговый беж/олива как canvas утомляет и спорит с данными. Белый + нейтральный серый держат плотность ClickUp-Light; лайм даёт узнаваемость ALMEA без шума.
 
@@ -32,7 +32,7 @@ Lemon не заменяет primary-кнопку и не красится в ф�
 ## 2. Источники
 
 1. **Брендбук ALMEA** — примитивы Black Forest, Dusty Olive, Beige, Lemon (HEX — канон для экрана).
-2. **Almea Web** (код `Project 10 Almea web`, прод: [almea-web.onrender.com](https://almea-web.onrender.com/)) — шрифты, радиусы, кнопки-пилюли, поля, лейблы, иконки, motion, плотность маркетинга.
+2. **Almea Web** (код `Project 10 Almea web`, прод: [almea-web.onrender.com](https://almea-web.onrender.com/)) — шрифты, радиусы, кнопки-пилюли, поля, лейблы, иконки, motion, плотность маркетинга; плюс web-акцент **Moss** (`--accent` сайта).
 3. **Этот документ** — как сложить (1) и (2) в рабочее приложение.
 
 Печать (CMYK / Pantone) — только для офлайна. В продукте — sRGB HEX.
@@ -41,14 +41,17 @@ Lemon не заменяет primary-кнопку и не красится в ф�
 
 ## 3. Цвет
 
-### 3.1. Примитивы брендбука
+### 3.1. Примитивы брендбука и Almea Web
 
 | Имя | HEX | RGB | Роль в Tracker |
 | --- | --- | --- | -------------- |
-| **Black Forest** | `#1D1E1A` | 29 30 26 | Чёрный продукта. Текст, лого, primary CTA, активная навигация. Не `#000`. |
+| **Black Forest** | `#1D1E1A` | 29 30 26 | Чёрный продукта. Текст, лого, primary CTA (покой), активная навигация. Не `#000`. |
+| **Moss** | `#264A35` | 38 74 53 | Благородный тёмно-зелёный с Almea Web (`hsl(145 32% 22%)`, там `--accent`). Hover primary, редкие brand-green моменты. Не заменяет Lemon и не становится холстом. |
 | **Dusty Olive** | `#B6BAA4` | 182 186 164 | Поддержка: тихие заливки, LOW-приоритет, редкие чипы. Не текст мелкого кегля на белом. |
 | **Beige** | `#E0E3D1` | 224 227 209 | Редко: бренд-графика, empty-state. Не фон приложения. |
-| **Lemon** | `#E7FC95` | 231 252 149 | Единственный громкий акцент. |
+| **Lemon** | `#E7FC95` | 231 252 149 | Единственный громкий акцент (лайм). |
+
+**Moss ≠ Black Forest.** Forest — почти чёрный с оливковым сдвигом. Moss — читаемый тёмно-зелёный: на сайте им красятся accent-кнопка и hover primary (`hover:bg-accent`).
 
 ### 3.2. Нейтральная шкала (основной UI)
 
@@ -75,8 +78,10 @@ Lemon не заменяет primary-кнопку и не красится в ф�
 | `--ink` | forest | Текст |
 | `--muted` / `--faint` | gray-500 / gray-400 | Вторичный / третичный текст |
 | `--line` / `--line-strong` | gray-200 / gray-300 | Разделители |
-| `--cta` / `--cta-text` | forest / white | Primary action |
-| `--accent` / `--accent-ink` | lemon / forest | Акцент и текст на нём |
+| `--cta` / `--cta-text` | forest / white | Primary action (покой) |
+| `--cta-hover` | moss | Primary hover — как на Almea Web |
+| `--accent` / `--accent-ink` | lemon / forest | Громкий акцент и текст на нём |
+| `--moss` / `--green` | Moss | Благородный зелёный; `--green` — алиас |
 | `--olive` | Dusty Olive | Поддержка |
 | `--beige` | Beige | Редкие бренд-пятна |
 
@@ -96,13 +101,15 @@ Lemon не заменяет primary-кнопку и не красится в ф�
 | Пара | Можно | Нельзя |
 | ---- | ----- | ------ |
 | Forest на white | Текст любого кегля | — |
+| Moss на white | Крупная заливка, кнопка, hover | Мелкий caps как единственный текст на белом |
+| White на moss | Текст на Moss-кнопке / hover CTA | — |
 | Gray-500 на white | Body / secondary | Мелкий caps < 12px как единственный контраст |
-| Lemon на forest | Текст, бейдж, кнопка accent | — |
+| Lemon на forest / moss | Текст, бейдж, кнопка accent | — |
 | Forest на lemon | Текст на accent-кнопке | — |
 | Lemon на white | Заливка пятна ≥ 8px, бордер, focus-ring | Текст, иконка 1px, hairline |
 | Olive на white | Крупная заливка, LOW-точка | Body-текст, мелкие лейблы |
 | Beige на white | Почти нечитаемо | Любой текст |
-| White на forest | Нав, primary | — |
+| White на forest | Нав, primary в покое | — |
 
 **Lemon на белом — только пятно, не буква.** Если нужен акцент в строке — точка, левый бар, чип с forest-текстом на lemon-заливке.
 
@@ -119,9 +126,23 @@ Lemon не заменяет primary-кнопку и не красится в ф�
 Запрещено:
 
 - фон страницы, сайдбара, модалки;
-- primary по умолчанию (primary = чёрная пилюля, как на сайте);
+- primary в покое (primary = чёрная пилюля; hover — Moss);
 - заливка целой канбан-колонки;
 - больше одного крупного lemon-пятна в вьюпорте.
+
+### 3.7. Где живёт Moss
+
+Разрешено:
+
+- hover primary CTA (`--cta-hover`);
+- опциональный variant **brand** (заливка Moss, текст white);
+- редкие brand-моменты, где нужен зелёный без лайма (не «статус done» по умолчанию).
+
+Запрещено:
+
+- фон страницы, сайдбара, модалки;
+- замена Lemon в focus-ring / «сегодня» / unread;
+- основной цвет body-текста (для текста — Forest).
 
 ---
 
@@ -186,13 +207,14 @@ Line-height: body 1.45–1.5; display 1.1–1.12.
 
 | Variant | Фон | Текст | Hover |
 | ------- | --- | ----- | ----- |
-| **default (primary)** | forest | white | чуть светлее forest |
+| **default (primary)** | forest | white | **moss** (как `hover:bg-accent` на Almea Web) |
 | **outline** | transparent, border forest 30% | forest | border 100% |
 | **ghost** | transparent | forest | gray-50 |
 | **accent** | lemon | forest | lemon 90% |
+| **brand** *(опционально)* | moss | white | moss 90% |
 | **link** | — | forest, sentence case | underline |
 
-Primary по умолчанию — чёрная пилюля. Accent — точечно.
+Primary в покое — чёрная пилюля; на hover уходит в Moss. Lemon-accent — точечно. Brand (Moss fill) — редко, когда нужен зелёный без лайма.
 
 ### 6.2. Поля
 
@@ -288,10 +310,13 @@ Lucide, `strokeWidth={1.5}`, размер 16–20px в UI, 20px в пустых 
 
 ```css
 --forest: #1D1E1A;
+--moss:   #264A35; /* Almea Web accent: hsl(145 32% 22%) */
 --olive:  #B6BAA4;
 --beige:  #E0E3D1;
 --lemon:  #E7FC95;
 --white:  #FFFFFF;
+--cta-hover: var(--moss);
+--green: var(--moss);
 --radius-pill: 999px;
 --radius-box: 0.25rem;
 --font: "Manrope", system-ui, sans-serif;
@@ -305,14 +330,15 @@ Lucide, `strokeWidth={1.5}`, размер 16–20px в UI, 20px в пустых 
 
 **Do**
 
-- Белый холст, серый сайдбар, чёрные пилюли, лайм точками.
+- Белый холст, серый сайдбар, чёрные пилюли, hover в Moss, лайм точками.
 - Manrope + Inter Tight, caps-лейблы, поля 4px / кнопки 999px.
-- Один accent на экран.
+- Один громкий accent (Lemon) на экран; Moss — тихий brand-green.
 
 **Don't**
 
-- Беж или олива как фон приложения.
+- Беж, олива или Moss как фон приложения / сайдбара.
 - Lemon-текст на белом.
+- Подменять Lemon на Moss «чтобы было зеленее» в focus-ring и «сегодня».
 - Inter / Georgia / системный display.
 - Крупные скругления карточек (12–16px) при пилюлях-кнопках.
 - Радужные статусы и второй акцентный цвет «для веселья».
@@ -324,10 +350,11 @@ Lucide, `strokeWidth={1.5}`, размер 16–20px в UI, 20px в пустых 
 1. Чёрный продукта = Black Forest, не `#000000`.
 2. Серый хрома = нейтральный, не Dusty Olive. Олива — отдельный supporting token.
 3. Беж почти не участвует в app chrome.
-4. Primary CTA всегда чёрная пилюля; lemon — accent.
-5. Функциональный red нужен для overdue; в брендбук его не записываем.
-6. Плотность трекера меньше маркетингового сайта; токены формы те же.
-7. Иконки Lucide, как на сайте; отдельный icon-font не заводим.
+4. Primary CTA в покое — чёрная пилюля; hover — Moss (как на сайте); Lemon — громкий accent.
+5. Moss взят с Almea Web (`--accent: 145 32% 22%` → `#264A35`), не из печатного брендбука.
+6. Функциональный red нужен для overdue; в брендбук его не записываем.
+7. Плотность трекера меньше маркетингового сайта; токены формы те же.
+8. Иконки Lucide / Marks, как в продукте; отдельный icon-font не заводим.
 
 Открыто (не блокирует v1): анимированный nav-pill как на сайте; тёмная тема; отдельный Figma-файл.
 
@@ -338,6 +365,7 @@ Lucide, `strokeWidth={1.5}`, размер 16–20px в UI, 20px в пустых 
 | Имя | CMYK | Pantone |
 | --- | ---- | ------- |
 | Black Forest | 38 35 33 92 | BLACK 7 C |
+| Moss | — | Web-only (`#264A35`); печатного Pantone нет |
 | Dusty Olive | 30 20 37 0 | 7537 C |
 | Beige | 4 2 4 8 | COOL GRAY 1 C |
 | Lemon | 16 0 41 0 | 372 C |

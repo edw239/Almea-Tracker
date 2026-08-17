@@ -1,7 +1,8 @@
+import { useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { isDueSoon, isOverdue } from '../lib/format'
+import { QuickAdd, TaskRow } from '../components/ui'
+import { isAssignedTo, isDueSoon, isOverdue } from '../lib/format'
 import { useStore } from '../store'
-import { TaskRow } from '../components/ui'
 import type { Task } from '../types'
 
 function Section({ title, tasks, onOpen }: { title: string; tasks: Task[]; onOpen: (id: string) => void }) {
@@ -24,11 +25,8 @@ function Section({ title, tasks, onOpen }: { title: string; tasks: Task[]; onOpe
 export function MyWorkPage() {
   const store = useStore()
   const navigate = useNavigate()
-  const mine = store.tasks.filter(
-    (task) =>
-      !task.parentTaskId &&
-      (task.assigneeIds.includes(store.currentUserId) || task.watcherIds.includes(store.currentUserId)),
-  )
+  const inboxId = store.personalInboxListId
+  const mine = store.tasks.filter((task) => !task.parentTaskId && isAssignedTo(task, store.currentUserId))
   const open = (id: string) => navigate(`/tasks/${id}`)
   const overdue = mine.filter((task) => isOverdue(task))
   const today = mine.filter((task) => isDueSoon(task) && !isOverdue(task))
@@ -40,14 +38,17 @@ export function MyWorkPage() {
       <header className="topbar">
         <div>
           <div className="kicker">My Work</div>
-          <h1 className="page-title">Что требует внимания CEO</h1>
+          <h1 className="page-title">Что требует внимания</h1>
           <p className="page-lead">
-            Не все задачи компании — только то, где вы исполнитель или наблюдатель. Иерархия слева, решения — здесь.
+            Только задачи, где вы исполнитель. Захват во входящие — внизу, командная работа — в дереве слева.
           </p>
+          {store.error ? <p className="form-error">{store.error}</p> : null}
         </div>
-        <Link className="pill" to="/week">
-          Неделя
-        </Link>
+        {inboxId ? (
+          <Link className="pill" to={`/lists/${inboxId}`}>
+            Входящие
+          </Link>
+        ) : null}
       </header>
       <div className="content">
         <div className="stats">
@@ -72,6 +73,7 @@ export function MyWorkPage() {
         <Section title="Сегодня" tasks={today} onOpen={open} />
         <Section title="Дальше по сроку" tasks={later} onOpen={open} />
         <Section title="Без даты" tasks={none} onOpen={open} />
+        {inboxId ? <QuickAdd listId={inboxId} placeholder="Захватить во входящие…" /> : null}
       </div>
     </>
   )
@@ -80,6 +82,11 @@ export function MyWorkPage() {
 export function OverduePage() {
   const store = useStore()
   const navigate = useNavigate()
+
+  useEffect(() => {
+    void store.loadOverdue()
+  }, [store])
+
   const tasks = store.tasks.filter((task) => isOverdue(task) && !task.parentTaskId)
   return (
     <>
@@ -87,7 +94,7 @@ export function OverduePage() {
         <div>
           <div className="kicker">Management</div>
           <h1 className="page-title">Просрочено</h1>
-          <p className="page-lead">По компании, не только ваши. Для разговора: что блокирует отгрузку и полку.</p>
+          <p className="page-lead">По видимым пространствам. Для разговора: что блокирует отгрузку и полку.</p>
         </div>
       </header>
       <div className="content">
@@ -104,10 +111,10 @@ export function OverduePage() {
 export function WeekPage() {
   const store = useStore()
   const navigate = useNavigate()
-  const decisions = store.tasks.filter((task) =>
-    ['t-kpi', 't-capacity', 't-dach', 't-batch', 't-wb'].includes(task.id),
-  )
-  const brands = store.lists.filter((list) => ['l-xlash', 'l-wndr', 'l-almea', 'l-pro'].includes(list.id))
+  const decisions = store.tasks
+    .filter((task) => task.assigneeIds.includes(store.currentUserId) && task.priority === 'URGENT')
+    .slice(0, 8)
+  const brandLists = store.lists.filter((list) => !list.systemKey).slice(0, 6)
 
   return (
     <>
@@ -115,9 +122,7 @@ export function WeekPage() {
         <div>
           <div className="kicker">CEO briefing</div>
           <h1 className="page-title">Неделя: решения, не активность</h1>
-          <p className="page-lead">
-            Три темы, которые стоит закрыть до совета: лаборатория, юнит маркетплейсов, приоритет стран.
-          </p>
+          <p className="page-lead">Срочные задачи, где вы исполнитель, и быстрый вход в списки.</p>
         </div>
       </header>
       <div className="content">
@@ -133,10 +138,10 @@ export function WeekPage() {
         </section>
         <section className="group">
           <div className="group-h">
-            <h2>Портфель</h2>
+            <h2>Списки</h2>
           </div>
           <div className="space-grid">
-            {brands.map((list) => {
+            {brandLists.map((list) => {
               const open = store.tasks.filter(
                 (task) => task.listId === list.id && task.status !== 'DONE' && task.status !== 'CANCELLED',
               )

@@ -1,32 +1,65 @@
-# React + TypeScript + Vite
+# Almea Tracker — web
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+React UI для Work Management. Данные — из Nest API (cookie-сессия).
 
-Currently, two official plugins are available:
+## Запуск
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+```bash
+# API (отдельный терминал) — см. api/README.md
+docker compose up -d postgres   # из корня репо
+cd api && npm run start:dev
 
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+# Web
+cd web
+cp .env.example .env
+npm install
+npm run dev
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+Откроется `http://localhost:5173`. Вход: `#/login` — `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` из `api/.env`.
+
+### Env
+
+| Переменная | Назначение |
+| ---------- | ---------- |
+| `VITE_API_URL` | База API. Пусто → same-origin; Vite proxy `/api` → `localhost:3001` |
+| `VITE_USE_MOCK=1` | Пустой mock-репозиторий без сети (только оболочка) |
+
+## Что подключено к API
+
+- Auth: login / logout / me (httpOnly cookie)
+- Sidebar spaces/lists, My Work, overdue
+- List / board: задачи, статусы, quick add, move/status, **filter bar**, **saved views**, **create from template**
+- Карточка: title, priority, due, description, assignees, comments, checklist; host deep-link при `domainEntity*`
+- Inbox (`#/inbox`): read / snooze / clear / read-all (badge в сайдбаре обновляется ~60s)
+- Host (`#/host/:entityType/:entityId`): ensure list + задачи сущности
+- Favorites через API
+
+## Ещё заглушки
+
+- Automations — отдельно (Phase C remainder)
+- Named shared views polish / reorder — позже
+- Email/push уведомления — только in-app inbox
+
+## Скрипты
+
+| Команда | Назначение |
+| ------- | ---------- |
+| `npm run dev` | Vite HMR |
+| `npm run build` | `tsc -b` + production bundle |
+| `npm run test` | Vitest (mechanics, filters) |
+| `npm run lint` | Oxlint |
+| `npm run preview` | preview + proxy `/api` |
+
+## Архитектура
+
+| Файл | Роль |
+| ---- | ---- |
+| `auth.tsx` | сессия, `RequireAuth` |
+| `lib/api.ts` | HTTP, `credentials: 'include'`, таймаут 15s |
+| `lib/mappers.ts` | API → UI-модель |
+| `data/repository.ts` | граница `http \| mock` |
+| `store.tsx` | состояние + optimistic status/move с rollback |
+| `App.tsx` | `HashRouter` (`#/lists/...`) для статического деплоя |
+
+Дизайн: [docs/DESIGN_SYSTEM.md](../docs/DESIGN_SYSTEM.md).

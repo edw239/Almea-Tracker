@@ -1,0 +1,421 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  GLOBAL_ADMIN
+  MEMBER
+}
+
+enum TaskStatus {
+  OPEN
+  IN_PROGRESS
+  DONE
+  CANCELLED
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum TaskSpaceMemberRole {
+  OWNER
+  MEMBER
+  VIEWER
+}
+
+enum TaskViewType {
+  LIST
+  BOARD
+  CALENDAR
+  TABLE
+}
+
+enum TaskGroupBy {
+  NONE
+  STATUS
+  PRIORITY
+  ASSIGNEE
+  DUE_DATE
+}
+
+enum TaskRelationType {
+  BLOCKS
+  RELATES
+}
+
+enum FavoriteEntityType {
+  TASK_LIST
+  TASK
+  TASK_VIEW
+}
+
+enum NotificationCode {
+  TASK_ASSIGNED
+  TASK_DUE_SOON
+  TASK_OVERDUE
+  TASK_MENTION
+  TASK_COMMENT
+  TASK_REMINDER
+  TASK_STATUS_CHANGED
+}
+
+enum NotificationSeverity {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+model User {
+  id           String   @id @default(uuid()) @db.Uuid
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  name         String
+  role         UserRole @default(MEMBER)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  spaceMembers     TaskSpaceMember[]
+  ownedTasks       Task[]              @relation("TaskOwner")
+  assignments      TaskAssignee[]
+  watchers         TaskWatcher[]
+  comments         TaskComment[]
+  activities       TaskActivity[]
+  viewPreferences  TaskViewPreference[]
+  ownedViews       TaskView[]
+  favorites        UserFavorite[]
+  notifications    TaskNotification[]
+  createdTemplates TaskTemplate[]
+
+  @@map("users")
+}
+
+model TaskSpace {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String
+  description String?
+  color       String?
+  icon        String?
+  isSystem    Boolean  @default(false) @map("is_system")
+  systemKey   String?  @unique @map("system_key")
+  isArchived  Boolean  @default(false) @map("is_archived")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  members   TaskSpaceMember[]
+  folders   TaskFolder[]
+  lists     TaskList[]
+  statuses  TaskListStatus[]
+  templates TaskTemplate[]
+
+  @@map("task_spaces")
+}
+
+model TaskSpaceMember {
+  spaceId   String              @map("space_id") @db.Uuid
+  userId    String              @map("user_id") @db.Uuid
+  role      TaskSpaceMemberRole
+  createdAt DateTime            @default(now()) @map("created_at")
+
+  space TaskSpace @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  user  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([spaceId, userId])
+  @@map("task_space_members")
+}
+
+model TaskFolder {
+  id         String   @id @default(uuid()) @db.Uuid
+  spaceId    String   @map("space_id") @db.Uuid
+  name       String
+  position   Float
+  isArchived Boolean  @default(false) @map("is_archived")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  space TaskSpace  @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  lists TaskList[]
+
+  @@index([spaceId, position])
+  @@map("task_folders")
+}
+
+model TaskList {
+  id             String   @id @default(uuid()) @db.Uuid
+  spaceId        String   @map("space_id") @db.Uuid
+  folderId       String?  @map("folder_id") @db.Uuid
+  name           String
+  position       Float
+  systemKey      String?  @map("system_key")
+  domainEntityId String?  @map("domain_entity_id")
+  isArchived     Boolean  @default(false) @map("is_archived")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  space            TaskSpace            @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  folder           TaskFolder?          @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  tasks            Task[]
+  statuses         TaskListStatus[]
+  viewPreferences  TaskViewPreference[]
+  views            TaskView[]
+  templates        TaskTemplate[]
+
+  @@unique([spaceId, systemKey])
+  @@index([spaceId, position])
+  @@map("task_lists")
+}
+
+model TaskListStatus {
+  id        String     @id @default(uuid()) @db.Uuid
+  spaceId   String     @map("space_id") @db.Uuid
+  listId    String?    @map("list_id") @db.Uuid
+  name      String
+  color     String
+  order     Int
+  category  TaskStatus
+  isDefault Boolean    @default(false) @map("is_default")
+  createdAt DateTime   @default(now()) @map("created_at")
+  updatedAt DateTime   @updatedAt @map("updated_at")
+
+  space TaskSpace  @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  list  TaskList?  @relation(fields: [listId], references: [id], onDelete: Cascade)
+  tasks Task[]
+
+  @@index([listId, order])
+  @@index([spaceId, order])
+  @@map("task_list_statuses")
+}
+
+model Task {
+  id             String       @id @default(uuid()) @db.Uuid
+  listId         String       @map("list_id") @db.Uuid
+  parentTaskId   String?      @map("parent_task_id") @db.Uuid
+  ownerUserId    String?      @map("owner_user_id") @db.Uuid
+  title          String       @db.VarChar(500)
+  description    String?
+  status         TaskStatus   @default(OPEN)
+  listStatusId   String?      @map("list_status_id") @db.Uuid
+  priority       TaskPriority @default(MEDIUM)
+  dueDate        DateTime?    @map("due_date")
+  startDate      DateTime?    @map("start_date")
+  completedAt    DateTime?    @map("completed_at")
+  position       Float
+  deletedAt        DateTime?    @map("deleted_at")
+  domainEntityId   String?      @map("domain_entity_id")
+  domainEntityType String?      @map("domain_entity_type") @db.VarChar(40)
+  domainLabel      String?      @map("domain_label") @db.VarChar(200)
+  createdAt        DateTime     @default(now()) @map("created_at")
+  updatedAt        DateTime     @updatedAt @map("updated_at")
+
+  list          TaskList          @relation(fields: [listId], references: [id], onDelete: Restrict)
+  parent        Task?             @relation("Subtasks", fields: [parentTaskId], references: [id], onDelete: Cascade)
+  children      Task[]            @relation("Subtasks")
+  owner         User?             @relation("TaskOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
+  listStatus    TaskListStatus?   @relation(fields: [listStatusId], references: [id], onDelete: SetNull)
+  assignees     TaskAssignee[]
+  watchers      TaskWatcher[]
+  comments      TaskComment[]
+  checklist     ChecklistItem[]
+  activities    TaskActivity[]
+  relationsFrom TaskRelation[]    @relation("RelationFrom")
+  relationsTo   TaskRelation[]    @relation("RelationTo")
+  notifications TaskNotification[]
+
+  @@index([listId, deletedAt])
+  @@index([listId, position])
+  @@index([listId, listStatusId])
+  @@index([ownerUserId, deletedAt])
+  @@index([parentTaskId])
+  @@index([dueDate])
+  @@index([domainEntityType, domainEntityId])
+  @@map("tasks")
+}
+
+model TaskNotification {
+  id           String               @id @default(uuid()) @db.Uuid
+  userId       String               @map("user_id") @db.Uuid
+  code         NotificationCode
+  severity     NotificationSeverity @default(LOW)
+  title        String               @db.VarChar(200)
+  body         String               @db.VarChar(1000)
+  taskId       String?              @map("task_id") @db.Uuid
+  readAt       DateTime?            @map("read_at")
+  snoozedUntil DateTime?            @map("snoozed_until")
+  clearedAt    DateTime?            @map("cleared_at")
+  dedupKey     String?              @map("dedup_key") @db.VarChar(200)
+  createdAt    DateTime             @default(now()) @map("created_at")
+
+  user User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  task Task? @relation(fields: [taskId], references: [id], onDelete: SetNull)
+
+  @@unique([userId, dedupKey])
+  @@index([userId, clearedAt, createdAt])
+  @@map("task_notifications")
+}
+
+model TaskAssignee {
+  taskId     String   @map("task_id") @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
+  assignedAt DateTime @default(now()) @map("assigned_at")
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([taskId, userId])
+  @@map("task_assignees")
+}
+
+model TaskWatcher {
+  taskId    String   @map("task_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at")
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([taskId, userId])
+  @@map("task_watchers")
+}
+
+model TaskComment {
+  id        String   @id @default(uuid()) @db.Uuid
+  taskId    String   @map("task_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  body      String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([taskId, createdAt])
+  @@map("task_comments")
+}
+
+model ChecklistItem {
+  id             String   @id @default(uuid()) @db.Uuid
+  taskId         String   @map("task_id") @db.Uuid
+  text           String
+  isDone         Boolean  @default(false) @map("is_done")
+  position       Int
+  assigneeUserId String?  @map("assignee_user_id") @db.Uuid
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([taskId, position])
+  @@map("checklist_items")
+}
+
+model TaskRelation {
+  id           String           @id @default(uuid()) @db.Uuid
+  fromTaskId   String           @map("from_task_id") @db.Uuid
+  toTaskId     String           @map("to_task_id") @db.Uuid
+  relationType TaskRelationType @map("relation_type")
+  createdAt    DateTime         @default(now()) @map("created_at")
+
+  fromTask Task @relation("RelationFrom", fields: [fromTaskId], references: [id], onDelete: Cascade)
+  toTask   Task @relation("RelationTo", fields: [toTaskId], references: [id], onDelete: Cascade)
+
+  @@unique([fromTaskId, toTaskId, relationType])
+  @@map("task_relations")
+}
+
+model TaskActivity {
+  id        String   @id @default(uuid()) @db.Uuid
+  taskId    String   @map("task_id") @db.Uuid
+  userId    String?  @map("user_id") @db.Uuid
+  action    String
+  details   Json?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  task Task  @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([taskId, createdAt])
+  @@map("task_activities")
+}
+
+model TaskViewPreference {
+  id        String       @id @default(uuid()) @db.Uuid
+  userId    String       @map("user_id") @db.Uuid
+  listId    String       @map("list_id") @db.Uuid
+  viewType  TaskViewType @default(LIST) @map("view_type")
+  groupBy   TaskGroupBy  @default(NONE) @map("group_by")
+  sort      Json?
+  filters   Json?
+  createdAt DateTime     @default(now()) @map("created_at")
+  updatedAt DateTime     @updatedAt @map("updated_at")
+
+  user User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  list TaskList @relation(fields: [listId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, listId])
+  @@map("task_view_preferences")
+}
+
+model TaskView {
+  id        String       @id @default(uuid()) @db.Uuid
+  listId    String       @map("list_id") @db.Uuid
+  ownerId   String       @map("owner_id") @db.Uuid
+  name      String
+  viewType  TaskViewType @map("view_type")
+  groupBy   TaskGroupBy  @default(NONE) @map("group_by")
+  sort      Json?
+  filters   Json?
+  columns   Json?
+  isShared  Boolean      @default(false) @map("is_shared")
+  position  Float
+  createdAt DateTime     @default(now()) @map("created_at")
+  updatedAt DateTime     @updatedAt @map("updated_at")
+
+  list  TaskList @relation(fields: [listId], references: [id], onDelete: Cascade)
+  owner User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@index([listId, position])
+  @@map("task_views")
+}
+
+model TaskTemplate {
+  id        String   @id @default(uuid()) @db.Uuid
+  spaceId   String?  @map("space_id") @db.Uuid
+  listId    String?  @map("list_id") @db.Uuid
+  name      String   @db.VarChar(120)
+  items     Json
+  isActive  Boolean  @default(true) @map("is_active")
+  createdBy String?  @map("created_by") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  space   TaskSpace? @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  list    TaskList?  @relation(fields: [listId], references: [id], onDelete: Cascade)
+  creator User?      @relation(fields: [createdBy], references: [id], onDelete: SetNull)
+
+  @@index([spaceId, isActive])
+  @@index([listId, isActive])
+  @@map("task_templates")
+}
+
+model UserFavorite {
+  id         String             @id @default(uuid()) @db.Uuid
+  userId     String             @map("user_id") @db.Uuid
+  entityType FavoriteEntityType @map("entity_type")
+  entityId   String             @map("entity_id") @db.Uuid
+  position   Float              @default(1000)
+  createdAt  DateTime           @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, entityType, entityId])
+  @@index([userId, position])
+  @@map("user_favorites")
+}

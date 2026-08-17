@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import type { ListStatus, Task, User } from '../types'
 import { dueLabel, isOverdue, progress } from '../lib/format'
 import { resolveStatusesForList } from '../lib/status'
@@ -78,8 +79,17 @@ export function MentionText({ body, users }: { body: string; users: User[] }) {
   )
 }
 
-export function QuickAdd({ listId }: { listId: string }) {
-  const { dispatch } = useStore()
+export function QuickAdd({
+  listId,
+  placeholder = 'Быстрая задача…',
+  onCreated,
+}: {
+  listId: string
+  placeholder?: string
+  onCreated?: (taskId: string) => void
+}) {
+  const store = useStore()
+  const [pending, setPending] = useState(false)
   return (
     <form
       className="quick"
@@ -88,14 +98,20 @@ export function QuickAdd({ listId }: { listId: string }) {
         const form = event.currentTarget
         const input = form.elements.namedItem('title') as HTMLInputElement
         const title = input.value.trim()
-        if (!title) return
-        dispatch({ type: 'ADD_TASK', listId, title })
-        input.value = ''
+        if (!title || pending) return
+        setPending(true)
+        void store
+          .addTask(listId, title)
+          .then((task) => {
+            input.value = ''
+            onCreated?.(task.id)
+          })
+          .finally(() => setPending(false))
       }}
     >
-      <input name="title" placeholder="Быстрая задача…" />
-      <button className="pill" type="submit">
-        Добавить
+      <input name="title" placeholder={placeholder} disabled={pending} />
+      <button className="pill" type="submit" disabled={pending}>
+        {pending ? '…' : 'Добавить'}
       </button>
     </form>
   )

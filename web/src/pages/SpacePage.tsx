@@ -5,6 +5,7 @@ export function SpacePage() {
   const { spaceId } = useParams()
   const store = useStore()
   const space = store.spaces.find((item) => item.id === spaceId)
+  if (!store.ready) return <p className="content">Загрузка…</p>
   if (!space) return <p className="content">Пространство не найдено</p>
 
   const folders = store.folders.filter((item) => item.spaceId === space.id)
@@ -57,7 +58,7 @@ function ListCard({ listId, name }: { listId: string; name: string }) {
   return (
     <Link to={`/lists/${listId}`} className="space-card">
       <h3>{name}</h3>
-      <p>{open} открытых · list — единица работы, не проект.</p>
+            <p>{open} открытых</p>
       <span>{starred ? 'в избранном' : 'открыть'}</span>
     </Link>
   )

@@ -1,49 +1,65 @@
 # Almea Tracker
 
-ClickUp-Light **Work Management** для Almea: Spaces → Folders → Lists → Tasks, dual status, views, collab, automations.
+ClickUp-Light **Work Management** для Almea: Spaces → Folders → Lists → Tasks, dual status, views, collab.
 
-Продуктовый и архитектурный каркас — из портабельного гайда Космонавт ERP (2026-08). Цель репозитория: вынести **Work Management Core** в отдельный продукт с тонким **Host Plugin** под домен Almea.
+Продуктовый каркас — [docs/task-tracker-principles.md](docs/task-tracker-principles.md). Host domain — плагин, не ветка дерева.
 
 ## Документация
 
 | Документ | Назначение |
 | -------- | ---------- |
-| [docs/DESIGN_SYSTEM.md](docs/DESIGN_SYSTEM.md) | Визуальный контракт: цвет, шрифт, форма, компоненты |
-| [docs/task-tracker-principles.md](docs/task-tracker-principles.md) | Полный гайд: модель, dual status, ACL, API, фазы, антипаттерны |
-| [docs/DEVELOPMENT_PLAN.md](docs/DEVELOPMENT_PLAN.md) | План разработки Almea Tracker по фазам |
+| [docs/DESIGN_SYSTEM.md](docs/DESIGN_SYSTEM.md) | Визуальный контракт |
+| [docs/task-tracker-principles.md](docs/task-tracker-principles.md) | Модель, dual status, ACL, API, фазы (портабельный гайд) |
+| [docs/DEVELOPMENT_PLAN.md](docs/DEVELOPMENT_PLAN.md) | Статус Almea Tracker по фазам |
+| [api/README.md](api/README.md) | Backend: env, auth cookie, endpoints |
+| [web/README.md](web/README.md) | Frontend: env, proxy, data layer |
 
-## Продуктовая рамка (кратко)
-
-- **Делаем:** hierarchy, dual status, DnD/position, My Work, comments, checklist, subtasks, relations, templates, automations (с depth guard), custom fields, saved views, notifications.
-- **Не делаем в v1:** Docs/wiki, Goals/OKR, time tracking, полный клон ClickUp (Dashboards, Whiteboards, Forms).
-
-Главный принцип: контейнерная иерархия отвечает за навигацию и ACL; домен хоста — атрибут/плагин, не ветка дерева.
-
-## Стек (допущение v0)
-
-Пока зафиксировано консервативно — уточним на старте Phase A:
+## Стек
 
 | Слой | Выбор |
 | ---- | ----- |
-| Backend | NestJS + Prisma + PostgreSQL |
-| Frontend | React + TypeScript |
-| API contract | OpenAPI с первого PR |
-| Auth | Host / shared auth Almea (TBD) |
+| Backend | NestJS + Prisma + PostgreSQL (`api/`) |
+| Frontend | React + TypeScript (`web/`) |
+| API contract | OpenAPI (`/api/docs`) |
+| Auth | JWT в httpOnly cookie `almea_access` (не Bearer в JSON) |
 
-## Демо (без бэкенда)
+## Статус (2026-08-17)
 
-Кликабельный прототип «глазами CEO»: My Work, неделя, inbox, spaces, lists, доска/таблица/календарь, карточка задачи. Данные в `localStorage` браузера.
+| Слой | Готово | Ещё нет |
+| ---- | ------ | ------- |
+| Backend | Phase A–B3 + inbox/host/filters + named views CRUD + templates/from-template | Automations, email/push, CF/types |
+| Frontend | Логин, sidebar, My Work, lists/board + filters + saved views, templates, карточка, Inbox, Host deep-link | Automations UI, shared Almea auth |
+
+## API
+
+PostgreSQL в Docker на **5433** (на Windows часто занят системный 5432). URL — в `api/.env.example`.
+
+```bash
+docker compose up -d postgres
+cd api
+cp .env.example .env   # JWT_SECRET (≥32), SEED_ADMIN_PASSWORD (≥8)
+npm install
+npx prisma migrate dev
+npm run prisma:seed
+npm run start:dev
+```
+
+- API: `http://localhost:3001/api`
+- OpenAPI: `http://localhost:3001/api/docs`
+- Seed-логин: `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` (по умолчанию `ceo@almea.local` / `change-me`)
+- Cookie: `almea_access`, httpOnly, SameSite=Lax, Secure только в production
+
+Подробнее — [api/README.md](api/README.md).
+
+## Web
 
 ```bash
 cd web
+cp .env.example .env   # VITE_API_URL=http://localhost:3001 или пусто + Vite proxy
 npm install
 npm run dev
 ```
 
-Откроется `http://localhost:5173`. Для проверки production-сборки: `npm run build && npm run preview`.
+Откроется `http://localhost:5173`, вход `#/login`. Маршруты через HashRouter (`#/lists/...`) — удобно для статического деплоя.
 
-Статический деплой на Render: корень репозитория, команда `npm --prefix web ci && npm --prefix web run build`, publish path `web/dist`. Маршруты через HashRouter (`#/inbox`), без rewrite-правил.
-
-## Статус
-
-Есть фронт-демо и план ядра. Backend ещё не начат — см. [план разработки](docs/DEVELOPMENT_PLAN.md).
+Подробнее — [web/README.md](web/README.md).

@@ -4,9 +4,9 @@
 | ---- | -------- |
 | **Источник** | Космонавт ERP (ADR-009, ADR-012, Waves 0–4, реализация 2026-08) |
 | **Назначение** | Подробный переносимый гайд для нового проекта / другой компании |
-| **Дата** | 2026-08-12 |
-| **Статус** | Living document |
-| **Связано** | ADR-009, ADR-012, `Implementation Status.md`, `openapi.yaml` |
+| **Дата** | 2026-08-12 (гайд); статус порта Almea — [DEVELOPMENT_PLAN.md](./DEVELOPMENT_PLAN.md) |
+| **Статус** | Living document — портабельный гайд |
+| **Связано** | ADR-009, ADR-012, `Implementation Status.md`, `openapi.yaml`; Almea: JWT httpOnly cookie в `api/` |
 
 Документ описывает **как устроен, как работает и как развивать** таск-трекер уровня ClickUp-Light из Космонавт ERP. Его можно использовать как ТЗ/архитектурный каркас ядра Work Management в новом продукте.
 
@@ -970,6 +970,8 @@ Host plugin (system entity lists, playbooks, domain ACL) подключайте 
 ---
 
 ## 18. Порт в новый проект: чеклист
+
+> **Almea Tracker (этот репозиторий):** прогресс фаз — [DEVELOPMENT_PLAN.md](./DEVELOPMENT_PLAN.md). Auth v0 — JWT в httpOnly cookie, не Bearer в localStorage.
 
 ### Репозиторий / модуль
 

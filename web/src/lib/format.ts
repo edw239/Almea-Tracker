@@ -92,8 +92,23 @@ export const PRIORITY_LABEL: Record<TaskPriority, string> = {
   URGENT: 'Срочно',
 }
 
+export function initialsFromName(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean)
+  if (parts.length === 0) return '?'
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
+  return `${parts[0][0] ?? ''}${parts[1][0] ?? ''}`.toUpperCase()
+}
+
 export function uid(prefix: string): string {
   return `${prefix}-${Math.random().toString(36).slice(2, 9)}`
+}
+
+export function byPosition<T extends { position: number; id: string }>(a: T, b: T): number {
+  return a.position - b.position || a.id.localeCompare(b.id)
+}
+
+export function isAssignedTo(task: Task, userId: string): boolean {
+  return task.assigneeIds.includes(userId)
 }
 
 export function progress(task: Task): { done: number; total: number } {

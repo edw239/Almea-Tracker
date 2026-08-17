@@ -2,6 +2,7 @@ import type { DemoState, ListStatus, Task } from '../types'
 import { isoDate } from '../lib/format'
 
 export const CURRENT_USER_ID = 'u-ceo'
+export const PERSONAL_INBOX_LIST_ID = 'l-inbox'
 export const SEED_VERSION = 1
 
 function daysFromToday(offset: number): string {
@@ -37,13 +38,18 @@ function spaceStatuses(spaceId: string, prefix: string): ListStatus[] {
   ]
 }
 
-function task(partial: Omit<Task, 'watcherIds' | 'startDate' | 'completedAt' | 'parentTaskId'> & Partial<Task>): Task {
+function task(
+  partial: Omit<Task, 'watcherIds' | 'startDate' | 'completedAt' | 'parentTaskId' | 'domainEntityId' | 'domainEntityType'> &
+    Partial<Task>,
+): Task {
   const status = partial.status
   return {
     parentTaskId: null,
     watcherIds: [CURRENT_USER_ID],
     startDate: null,
     completedAt: status === 'DONE' ? hoursAgo(48) : null,
+    domainEntityId: null,
+    domainEntityType: null,
     ...partial,
   }
 }

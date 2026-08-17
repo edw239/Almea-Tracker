@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { TaskPanel } from '../components/TaskPanel'
 import { useStore } from '../store'
@@ -6,10 +7,15 @@ export function TaskPage() {
   const { taskId } = useParams()
   const store = useStore()
   const task = store.tasks.find((item) => item.id === taskId)
+
+  useEffect(() => {
+    if (taskId) void store.ensureTask(taskId)
+  }, [store, taskId])
+
   if (!task) {
     return (
       <div className="content">
-        <p>Задача не найдена.</p>
+        <p>{store.ready ? 'Задача не найдена.' : 'Загрузка…'}</p>
         <Link to="/">Назад</Link>
       </div>
     )
@@ -21,16 +27,12 @@ export function TaskPage() {
         <header className="topbar">
           <div>
             <div className="kicker">Task</div>
-            <h1 className="page-title">{task.title}</h1>
+            <h1 className="page-title">Карточка</h1>
             <p className="page-lead">
-              Deep-link карточки. List:{' '}
-              <Link to={`/lists/${task.listId}`}>{list?.name}</Link>
+              Deep-link. <Link to={`/lists/${task.listId}`}>{list?.name ?? 'Список'}</Link>
             </p>
           </div>
         </header>
-        <div className="content">
-          <p className="page-lead">{task.description}</p>
-        </div>
       </div>
       <TaskPanel task={task} />
     </div>

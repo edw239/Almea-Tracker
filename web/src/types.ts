@@ -100,7 +100,7 @@ export type Task = {
   title: string
   description: string
   status: TaskStatus
-  listStatusId: string
+  listStatusId: string | null
   priority: TaskPriority
   position: number
   ownerUserId: string
@@ -111,6 +111,8 @@ export type Task = {
   completedAt: string | null
   checklist: ChecklistItem[]
   domainLabel: string | null
+  domainEntityId: string | null
+  domainEntityType: string | null
 }
 
 export type Notification = {

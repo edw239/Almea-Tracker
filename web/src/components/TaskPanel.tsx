@@ -1,9 +1,9 @@
-import { useState } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
-import type { Task } from '../types'
-import { formatDateTime } from '../lib/format'
+import { formatDateTime, PRIORITY_LABEL } from '../lib/format'
 import { resolveStatusesForList } from '../lib/status'
 import { useStore } from '../store'
+import type { Task } from '../types'
 import { MentionText } from './ui'
 
 export function TaskPanel({ task, onClose }: { task: Task; onClose?: () => void }) {
@@ -16,25 +16,45 @@ export function TaskPanel({ task, onClose }: { task: Task; onClose?: () => void 
   const subtasks = store.tasks.filter((item) => item.parentTaskId === task.id)
   const blocked = relations.some((item) => item.type === 'BLOCKS' && item.toTaskId === task.id)
   const favorite = store.favorites.some((item) => item.entityType === 'TASK' && item.entityId === task.id)
+  const [title, setTitle] = useState(task.title)
+  const [description, setDescription] = useState(task.description)
   const [comment, setComment] = useState('')
   const [checkText, setCheckText] = useState('')
+
+  useEffect(() => {
+    setTitle(task.title)
+    setDescription(task.description)
+  }, [task.description, task.id, task.title])
 
   return (
     <aside className="panel">
       <div className="panel-head">
         <div>
           <div className="kicker">{list?.name}</div>
-          <h2 className="panel-title">{task.title}</h2>
+          <input
+            className="panel-title-input"
+            value={title}
+            aria-label="Название"
+            onChange={(event) => setTitle(event.target.value)}
+            onBlur={() => {
+              const next = title.trim()
+              if (!next) {
+                setTitle(task.title)
+                return
+              }
+              if (next !== task.title) void store.patchTask(task.id, { title: next })
+            }}
+          />
           {blocked ? <p className="blocked">Заблокирована входящей связью BLOCKS</p> : null}
+          {task.domainLabel && task.domainEntityType && task.domainEntityId ? (
+            <p className="page-lead">
+              Host:{' '}
+              <Link to={`/host/${task.domainEntityType}/${task.domainEntityId}`}>{task.domainLabel}</Link>
+            </p>
+          ) : null}
         </div>
         <div className="top-actions">
-          <button
-            type="button"
-            className="ghost"
-            onClick={() =>
-              store.dispatch({ type: 'TOGGLE_FAVORITE', entityType: 'TASK', entityId: task.id })
-            }
-          >
+          <button type="button" className="ghost" onClick={() => void store.toggleFavorite('TASK', task.id)}>
             {favorite ? 'В избранном' : 'В избранное'}
           </button>
           {onClose ? (
@@ -42,7 +62,7 @@ export function TaskPanel({ task, onClose }: { task: Task; onClose?: () => void 
               ×
             </button>
           ) : (
-            <Link className="icon-btn" to="/" aria-label="Назад">
+            <Link className="icon-btn" to={`/lists/${task.listId}`} aria-label="К списку">
               ×
             </Link>
           )}
@@ -53,10 +73,10 @@ export function TaskPanel({ task, onClose }: { task: Task; onClose?: () => void 
         <div className="field">
           <label>Колонка</label>
           <select
-            value={task.listStatusId}
-            onChange={(event) =>
-              store.dispatch({ type: 'SET_STATUS', taskId: task.id, listStatusId: event.target.value })
-            }
+            value={task.listStatusId ?? ''}
+            onChange={(event) => {
+              if (event.target.value) void store.setStatus(task.id, event.target.value)
+            }}
           >
             {statuses.map((status) => (
               <option key={status.id} value={status.id}>
@@ -70,17 +90,14 @@ export function TaskPanel({ task, onClose }: { task: Task; onClose?: () => void 
           <select
             value={task.priority}
             onChange={(event) =>
-              store.dispatch({
-                type: 'PATCH_TASK',
-                taskId: task.id,
-                patch: { priority: event.target.value as Task['priority'] },
-              })
+              void store.patchTask(task.id, { priority: event.target.value as Task['priority'] })
             }
           >
-            <option value="URGENT">Срочно</option>
-            <option value="HIGH">Высокий</option>
-            <option value="MEDIUM">Средний</option>
-            <option value="LOW">Низкий</option>
+            {(['URGENT', 'HIGH', 'MEDIUM', 'LOW'] as const).map((value) => (
+              <option key={value} value={value}>
+                {PRIORITY_LABEL[value]}
+              </option>
+            ))}
           </select>
         </div>
       </div>
@@ -90,13 +107,7 @@ export function TaskPanel({ task, onClose }: { task: Task; onClose?: () => void 
         <input
           type="date"
           value={task.dueDate ?? ''}
-          onChange={(event) =>
-            store.dispatch({
-              type: 'PATCH_TASK',
-              taskId: task.id,
-              patch: { dueDate: event.target.value || null },
-            })
-          }
+          onChange={(event) => void store.patchTask(task.id, { dueDate: event.target.value || null })}
         />
       </div>
 
@@ -110,7 +121,7 @@ export function TaskPanel({ task, onClose }: { task: Task; onClose?: () => void 
                 key={user.id}
                 type="button"
                 className={`chip ${on ? 'on' : ''}`}
-                onClick={() => store.dispatch({ type: 'TOGGLE_ASSIGNEE', taskId: task.id, userId: user.id })}
+                onClick={() => void store.toggleAssignee(task.id, user.id)}
               >
                 {user.name}
               </button>
@@ -122,10 +133,11 @@ export function TaskPanel({ task, onClose }: { task: Task; onClose?: () => void 
       <div className="field">
         <label>Суть</label>
         <textarea
-          value={task.description}
-          onChange={(event) =>
-            store.dispatch({ type: 'PATCH_TASK', taskId: task.id, patch: { description: event.target.value } })
-          }
+          value={description}
+          onChange={(event) => setDescription(event.target.value)}
+          onBlur={() => {
+            if (description !== task.description) void store.patchTask(task.id, { description })
+          }}
         />
       </div>
 
@@ -137,7 +149,11 @@ export function TaskPanel({ task, onClose }: { task: Task; onClose?: () => void 
             const other = store.tasks.find((item) => item.id === otherId)
             return (
               <div key={rel.id} className="chip">
-                {rel.type === 'BLOCKS' && rel.fromTaskId === task.id ? 'блокирует' : rel.type === 'BLOCKS' ? 'ждёт' : 'связана'}{' '}
+                {rel.type === 'BLOCKS' && rel.fromTaskId === task.id
+                  ? 'блокирует'
+                  : rel.type === 'BLOCKS'
+                    ? 'ждёт'
+                    : 'связана'}{' '}
                 {other?.title}
               </div>
             )
@@ -163,17 +179,17 @@ export function TaskPanel({ task, onClose }: { task: Task; onClose?: () => void 
             <input
               type="checkbox"
               checked={item.done}
-              onChange={() => store.dispatch({ type: 'TOGGLE_CHECK', taskId: task.id, itemId: item.id })}
+              onChange={() => void store.toggleChecklist(task.id, item.id)}
             />
             <span>{item.text}</span>
           </label>
         ))}
         <form
           className="quick"
-          onSubmit={(event) => {
+          onSubmit={(event: FormEvent) => {
             event.preventDefault()
             if (!checkText.trim()) return
-            store.dispatch({ type: 'ADD_CHECK', taskId: task.id, text: checkText })
+            void store.addChecklist(task.id, checkText)
             setCheckText('')
           }}
         >
@@ -185,14 +201,18 @@ export function TaskPanel({ task, onClose }: { task: Task; onClose?: () => void 
         <label>Комментарии</label>
         <form
           className="quick"
-          onSubmit={(event) => {
+          onSubmit={(event: FormEvent) => {
             event.preventDefault()
             if (!comment.trim()) return
-            store.dispatch({ type: 'ADD_COMMENT', taskId: task.id, body: comment })
+            void store.addComment(task.id, comment)
             setComment('')
           }}
         >
-          <input value={comment} onChange={(event) => setComment(event.target.value)} placeholder="Комментарий CEO…" />
+          <input
+            value={comment}
+            onChange={(event) => setComment(event.target.value)}
+            placeholder="Комментарий… @[uuid] для упоминания"
+          />
           <button className="pill" type="submit">
             Отправить
           </button>
@@ -214,6 +234,7 @@ export function TaskPanel({ task, onClose }: { task: Task; onClose?: () => void 
 
       <div className="field">
         <label>Активность</label>
+        {activity.length === 0 ? <p className="muted">Пока нет записей</p> : null}
         {activity.map((item) => {
           const author = store.users.find((user) => user.id === item.userId)
           return (
