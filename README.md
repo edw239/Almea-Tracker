@@ -67,9 +67,9 @@ npm run dev
 | Сервис | URL |
 | ------ | --- |
 | UI (static) | https://almea-track.onrender.com |
-| API | https://almea-tracker-api.onrender.com (`/api`, OpenAPI `/api/docs`) |
+| API | https://almea-api.onrender.com (`/api`, OpenAPI `/api/docs`) |
 
 Env API: `DATABASE_URL`, `JWT_SECRET` (≥32), `WEB_ORIGIN=https://almea-track.onrender.com`, `SEED_ADMIN_*`.  
-UI build: `VITE_API_URL=https://almea-tracker-api.onrender.com`. Cookie в production: `SameSite=None; Secure` (разные хосты onrender).
+UI build: `VITE_API_URL=https://almea-api.onrender.com`. Cookie в production: `SameSite=None; Secure` (разные хосты onrender).
 
 Подробнее — [web/README.md](web/README.md).
