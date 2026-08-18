@@ -5,7 +5,7 @@ import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { AUTH_COOKIE_NAME } from '../src/identity/auth/auth.constants';
 
-const email = process.env.SEED_ADMIN_EMAIL ?? 'ceo@almea.local';
+const email = process.env.SEED_ADMIN_EMAIL ?? 'admin@almea.ru';
 const password = process.env.SEED_ADMIN_PASSWORD ?? '';
 const canSmoke =
   Boolean(process.env.DATABASE_URL) &&

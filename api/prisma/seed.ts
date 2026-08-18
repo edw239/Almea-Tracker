@@ -31,7 +31,7 @@ async function seedStatuses(spaceId: string, listId: string | null) {
 }
 
 async function main() {
-  const email = (process.env.SEED_ADMIN_EMAIL ?? 'ceo@almea.local').toLowerCase();
+  const email = (process.env.SEED_ADMIN_EMAIL ?? 'admin@almea.ru').toLowerCase();
   const password = process.env.SEED_ADMIN_PASSWORD;
   if (!password || password.length < 8) {
     throw new Error('SEED_ADMIN_PASSWORD must be set and at least 8 characters');
