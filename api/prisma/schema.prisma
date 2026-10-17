@@ -52,6 +52,12 @@ enum TaskRelationType {
   RELATES
 }
 
+enum ScheduleFrequency {
+  DAILY
+  WEEKLY
+  MONTHLY
+}
+
 enum FavoriteEntityType {
   TASK_LIST
   TASK
@@ -66,6 +72,8 @@ enum NotificationCode {
   TASK_COMMENT
   TASK_REMINDER
   TASK_STATUS_CHANGED
+  TASK_REVIEW_REQUESTED
+  TASK_STUCK
 }
 
 enum NotificationSeverity {
@@ -74,27 +82,59 @@ enum NotificationSeverity {
   HIGH
 }
 
+model UserNotificationSetting {
+  id        String           @id @default(uuid()) @db.Uuid
+  userId    String           @map("user_id") @db.Uuid
+  code      NotificationCode
+  inApp     Boolean          @default(true) @map("in_app")
+  createdAt DateTime         @default(now()) @map("created_at")
+  updatedAt DateTime         @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, code])
+  @@index([userId])
+  @@map("user_notification_settings")
+}
+
 model User {
-  id           String   @id @default(uuid()) @db.Uuid
-  email        String   @unique
-  passwordHash String   @map("password_hash")
-  name         String
-  role         UserRole @default(MEMBER)
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
+  id                  String    @id @default(uuid()) @db.Uuid
+  email               String    @unique
+  passwordHash        String    @map("password_hash")
+  name                String
+  role                UserRole  @default(MEMBER)
+  timezone            String    @default("Asia/Dubai")
+  locale              String    @default("ru")
+  jobTitle            String?   @map("job_title")
+  passwordChangedAt   DateTime? @map("password_changed_at")
+  quietHoursFrom      Int?      @map("quiet_hours_from")
+  quietHoursTo        Int?      @map("quiet_hours_to")
+  snoozeHoursDefault  Int?      @map("snooze_hours_default")
+  isActive            Boolean   @default(true) @map("is_active")
+  mustChangePassword  Boolean   @default(false) @map("must_change_password")
+  createdByUserId     String?   @map("created_by_user_id") @db.Uuid
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
 
-  spaceMembers     TaskSpaceMember[]
-  ownedTasks       Task[]              @relation("TaskOwner")
-  assignments      TaskAssignee[]
-  watchers         TaskWatcher[]
-  comments         TaskComment[]
-  activities       TaskActivity[]
-  viewPreferences  TaskViewPreference[]
-  ownedViews       TaskView[]
-  favorites        UserFavorite[]
-  notifications    TaskNotification[]
-  createdTemplates TaskTemplate[]
+  createdBy              User?                     @relation("UserProvisioner", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  provisionedUsers       User[]                    @relation("UserProvisioner")
+  spaceMembers           TaskSpaceMember[]
+  ownedTasks             Task[]                    @relation("TaskOwner")
+  assignments            TaskAssignee[]
+  watchers               TaskWatcher[]
+  comments               TaskComment[]
+  activities             TaskActivity[]
+  viewPreferences        TaskViewPreference[]
+  ownedViews             TaskView[]
+  favorites              UserFavorite[]
+  notifications          TaskNotification[]
+  createdTemplates       TaskTemplate[]
+  notificationSettings   UserNotificationSetting[]
+  createdTasks           Task[]                    @relation("TaskCreator")
+  assignedSchedules      TaskSchedule[]            @relation("ScheduleAssignee")
+  stuckTasks             Task[]                    @relation("TaskStuckBy")
 
+  @@index([isActive])
   @@map("users")
 }
 
@@ -115,8 +155,28 @@ model TaskSpace {
   lists     TaskList[]
   statuses  TaskListStatus[]
   templates TaskTemplate[]
+  taskTypes TaskType[]
 
   @@map("task_spaces")
+}
+
+model TaskType {
+  id        String   @id @default(uuid()) @db.Uuid
+  spaceId   String   @map("space_id") @db.Uuid
+  key       String   @db.VarChar(40)
+  name      String   @db.VarChar(80)
+  color     String?  @db.VarChar(20)
+  isSystem  Boolean  @default(false) @map("is_system")
+  position  Int      @default(0)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  space TaskSpace @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  tasks Task[]
+
+  @@unique([spaceId, key])
+  @@index([spaceId, position])
+  @@map("task_types")
 }
 
 model TaskSpaceMember {
@@ -156,20 +216,24 @@ model TaskList {
   position       Float
   systemKey      String?  @map("system_key")
   domainEntityId String?  @map("domain_entity_id")
+  hostEntityId   String?  @map("host_entity_id") @db.Uuid
   isArchived     Boolean  @default(false) @map("is_archived")
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @updatedAt @map("updated_at")
 
   space            TaskSpace            @relation(fields: [spaceId], references: [id], onDelete: Cascade)
   folder           TaskFolder?          @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  hostEntity       HostEntity?          @relation(fields: [hostEntityId], references: [id], onDelete: SetNull)
   tasks            Task[]
   statuses         TaskListStatus[]
   viewPreferences  TaskViewPreference[]
   views            TaskView[]
   templates        TaskTemplate[]
+  schedules        TaskSchedule[]
 
   @@unique([spaceId, systemKey])
   @@index([spaceId, position])
+  @@index([hostEntityId])
   @@map("task_lists")
 }
 
@@ -195,23 +259,33 @@ model TaskListStatus {
 }
 
 model Task {
-  id             String       @id @default(uuid()) @db.Uuid
-  listId         String       @map("list_id") @db.Uuid
-  parentTaskId   String?      @map("parent_task_id") @db.Uuid
-  ownerUserId    String?      @map("owner_user_id") @db.Uuid
-  title          String       @db.VarChar(500)
-  description    String?
-  status         TaskStatus   @default(OPEN)
-  listStatusId   String?      @map("list_status_id") @db.Uuid
-  priority       TaskPriority @default(MEDIUM)
-  dueDate        DateTime?    @map("due_date")
-  startDate      DateTime?    @map("start_date")
-  completedAt    DateTime?    @map("completed_at")
-  position       Float
+  id               String       @id @default(uuid()) @db.Uuid
+  listId           String       @map("list_id") @db.Uuid
+  parentTaskId     String?      @map("parent_task_id") @db.Uuid
+  ownerUserId      String?      @map("owner_user_id") @db.Uuid
+  createdByUserId  String?      @map("created_by_user_id") @db.Uuid
+  title            String       @db.VarChar(500)
+  description      String?
+  status           TaskStatus   @default(OPEN)
+  listStatusId     String?      @map("list_status_id") @db.Uuid
+  priority         TaskPriority @default(MEDIUM)
+  dueDate          DateTime?    @map("due_date")
+  startDate        DateTime?    @map("start_date")
+  completedAt      DateTime?    @map("completed_at")
+  reviewRequired   Boolean      @default(false) @map("review_required")
+  submittedAt      DateTime?    @map("submitted_at")
+  position         Float
   deletedAt        DateTime?    @map("deleted_at")
   domainEntityId   String?      @map("domain_entity_id")
   domainEntityType String?      @map("domain_entity_type") @db.VarChar(40)
   domainLabel      String?      @map("domain_label") @db.VarChar(200)
+  hostEntityId     String?      @map("host_entity_id") @db.Uuid
+  taskTypeId       String?      @map("task_type_id") @db.Uuid
+  isStuck          Boolean      @default(false) @map("is_stuck")
+  stuckAt          DateTime?    @map("stuck_at")
+  stuckReason      String?      @map("stuck_reason") @db.VarChar(500)
+  stuckByUserId    String?      @map("stuck_by_user_id") @db.Uuid
+  dueDateMoveCount Int          @default(0) @map("due_date_move_count")
   createdAt        DateTime     @default(now()) @map("created_at")
   updatedAt        DateTime     @updatedAt @map("updated_at")
 
@@ -219,6 +293,10 @@ model Task {
   parent        Task?             @relation("Subtasks", fields: [parentTaskId], references: [id], onDelete: Cascade)
   children      Task[]            @relation("Subtasks")
   owner         User?             @relation("TaskOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
+  createdBy     User?             @relation("TaskCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  stuckBy       User?             @relation("TaskStuckBy", fields: [stuckByUserId], references: [id], onDelete: SetNull)
+  hostEntity    HostEntity?       @relation(fields: [hostEntityId], references: [id], onDelete: SetNull)
+  taskType      TaskType?         @relation(fields: [taskTypeId], references: [id], onDelete: SetNull)
   listStatus    TaskListStatus?   @relation(fields: [listStatusId], references: [id], onDelete: SetNull)
   assignees     TaskAssignee[]
   watchers      TaskWatcher[]
@@ -228,15 +306,40 @@ model Task {
   relationsFrom TaskRelation[]    @relation("RelationFrom")
   relationsTo   TaskRelation[]    @relation("RelationTo")
   notifications TaskNotification[]
+  scheduleRuns  TaskScheduleRun[]
 
   @@index([listId, deletedAt])
   @@index([listId, position])
   @@index([listId, listStatusId])
   @@index([ownerUserId, deletedAt])
+  @@index([createdByUserId])
   @@index([parentTaskId])
   @@index([dueDate])
   @@index([domainEntityType, domainEntityId])
+  @@index([hostEntityId])
+  @@index([reviewRequired, status])
+  @@index([isStuck])
+  @@index([taskTypeId])
+  @@index([dueDateMoveCount])
   @@map("tasks")
+}
+
+model HostEntity {
+  id          String   @id @default(uuid()) @db.Uuid
+  entityType  String   @map("entity_type") @db.VarChar(40)
+  name        String   @db.VarChar(200)
+  nameKey     String   @map("name_key") @db.VarChar(200)
+  externalKey String?  @map("external_key") @db.VarChar(100)
+  isArchived  Boolean  @default(false) @map("is_archived")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  tasks Task[]
+  lists TaskList[]
+
+  @@unique([entityType, nameKey])
+  @@index([entityType, isArchived])
+  @@map("host_entities")
 }
 
 model TaskNotification {
@@ -342,6 +445,7 @@ model TaskActivity {
   user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([taskId, createdAt])
+  @@index([userId, createdAt])
   @@map("task_activities")
 }
 
@@ -399,10 +503,51 @@ model TaskTemplate {
   space   TaskSpace? @relation(fields: [spaceId], references: [id], onDelete: Cascade)
   list    TaskList?  @relation(fields: [listId], references: [id], onDelete: Cascade)
   creator User?      @relation(fields: [createdBy], references: [id], onDelete: SetNull)
+  schedules TaskSchedule[]
 
   @@index([spaceId, isActive])
   @@index([listId, isActive])
   @@map("task_templates")
+}
+
+model TaskSchedule {
+  id             String            @id @default(uuid()) @db.Uuid
+  listId         String            @map("list_id") @db.Uuid
+  templateId     String?           @map("template_id") @db.Uuid
+  title          String            @db.VarChar(200)
+  frequency      ScheduleFrequency
+  byWeekday      Int?              @map("by_weekday") @db.SmallInt
+  byMonthday     Int?              @map("by_monthday") @db.SmallInt
+  atMinute       Int               @map("at_minute")
+  timezone       String
+  assigneeUserId String?           @map("assignee_user_id") @db.Uuid
+  dueInDays      Int?              @map("due_in_days")
+  isActive       Boolean           @default(true) @map("is_active")
+  nextRunAt      DateTime          @map("next_run_at")
+  lastRunAt      DateTime?         @map("last_run_at")
+  createdAt      DateTime          @default(now()) @map("created_at")
+  updatedAt      DateTime          @updatedAt @map("updated_at")
+
+  list     TaskList          @relation(fields: [listId], references: [id], onDelete: Cascade)
+  template TaskTemplate?     @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  assignee User?             @relation("ScheduleAssignee", fields: [assigneeUserId], references: [id], onDelete: SetNull)
+  runs     TaskScheduleRun[]
+
+  @@index([nextRunAt], map: "task_schedules_next_run_at_idx")
+  @@map("task_schedules")
+}
+
+model TaskScheduleRun {
+  scheduleId String   @map("schedule_id") @db.Uuid
+  periodKey  String   @map("period_key") @db.VarChar(40)
+  taskId     String?  @map("task_id") @db.Uuid
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  schedule TaskSchedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  task     Task?        @relation(fields: [taskId], references: [id], onDelete: SetNull)
+
+  @@id([scheduleId, periodKey])
+  @@map("task_schedule_runs")
 }
 
 model UserFavorite {

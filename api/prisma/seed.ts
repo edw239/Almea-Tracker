@@ -1,4 +1,4 @@
-import { PrismaClient, TaskPriority, TaskStatus, UserRole } from '@prisma/client';
+import { PrismaClient, ScheduleFrequency, TaskPriority, TaskStatus, UserRole } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import {
   DEFAULT_STATUSES,
@@ -6,6 +6,7 @@ import {
   SYSTEM_LIST_PERSONAL_INBOX,
   SYSTEM_SPACE_PERSONAL,
 } from '../src/common/constants';
+import { computeNextRunAt } from '../src/work-management/utils/schedule-timing.util';
 
 const prisma = new PrismaClient();
 const BCRYPT_ROUNDS = 12;
@@ -104,6 +105,27 @@ async function main() {
     where: { listId: strategy.id, category: TaskStatus.IN_PROGRESS },
   });
 
+  await prisma.taskSpace.upsert({
+    where: { systemKey: 'host' },
+    update: {},
+    create: {
+      name: 'Host',
+      description: 'System space для entity-lists.',
+      isSystem: true,
+      systemKey: 'host',
+    },
+  });
+
+  const xlash = await prisma.hostEntity.upsert({
+    where: { entityType_nameKey: { entityType: 'brand', nameKey: 'xlash' } },
+    update: {},
+    create: {
+      entityType: 'brand',
+      name: 'XLASH',
+      nameKey: 'xlash',
+    },
+  });
+
   const existingTasks = await prisma.task.count({ where: { deletedAt: null } });
   if (existingTasks === 0) {
     await prisma.task.create({
@@ -130,29 +152,32 @@ async function main() {
         priority: TaskPriority.URGENT,
         position: POSITION_STEP,
         domainEntityType: 'brand',
-        domainEntityId: 'xlash',
+        domainEntityId: xlash.id,
         domainLabel: 'XLASH',
+        hostEntityId: xlash.id,
         assignees: { create: { userId: user.id } },
+      },
+    });
+  } else {
+    await prisma.task.updateMany({
+      where: {
+        domainEntityType: 'brand',
+        domainLabel: 'XLASH',
+        hostEntityId: null,
+      },
+      data: {
+        hostEntityId: xlash.id,
+        domainEntityId: xlash.id,
       },
     });
   }
 
-  await prisma.taskSpace.upsert({
-    where: { systemKey: 'host' },
-    update: {},
-    create: {
-      name: 'Host',
-      description: 'System space для entity-lists.',
-      isSystem: true,
-      systemKey: 'host',
-    },
-  });
-
   const weekly = await prisma.taskTemplate.findFirst({
     where: { spaceId: ops.id, name: 'Еженедельный ops-пакет' },
   });
+  let weeklyId = weekly?.id;
   if (!weekly) {
-    await prisma.taskTemplate.create({
+    const created = await prisma.taskTemplate.create({
       data: {
         spaceId: ops.id,
         name: 'Еженедельный ops-пакет',
@@ -174,6 +199,40 @@ async function main() {
             checklist: [{ text: 'XLASH' }, { text: 'Прочие SKU' }],
           },
         ],
+      },
+    });
+    weeklyId = created.id;
+  }
+
+  const existingSchedule = await prisma.taskSchedule.findFirst({
+    where: { listId: strategy.id, title: 'Еженедельный ops-пакет' },
+  });
+  if (!existingSchedule && weeklyId) {
+    // Monday 09:00 Asia/Dubai — next occurrence computed at seed time.
+    const atMinute = 9 * 60;
+    const timezone = 'Asia/Dubai';
+    const nextRunAt = computeNextRunAt(
+      new Date(),
+      {
+        frequency: ScheduleFrequency.WEEKLY,
+        byWeekday: 1,
+        atMinute,
+        timezone,
+      },
+      { inclusive: true },
+    );
+    await prisma.taskSchedule.create({
+      data: {
+        listId: strategy.id,
+        templateId: weeklyId,
+        title: 'Еженедельный ops-пакет',
+        frequency: ScheduleFrequency.WEEKLY,
+        byWeekday: 1,
+        atMinute,
+        timezone,
+        assigneeUserId: user.id,
+        dueInDays: 2,
+        nextRunAt,
       },
     });
   }
