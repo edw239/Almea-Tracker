@@ -6,8 +6,9 @@ React UI для Work Management. Данные — из Nest API (cookie-сесс
 
 ```bash
 # API (отдельный терминал) — см. api/README.md
-docker compose up -d postgres   # из корня репо
-cd api && npm run start:dev
+# Docker Desktop должен быть запущен
+docker compose up -d postgres   # из корня репо → localhost:5433
+cd api && npx prisma migrate deploy && npm run start:dev
 
 # Web
 cd web
@@ -28,18 +29,26 @@ npm run dev
 ## Что подключено к API
 
 - Auth: login / logout / me (httpOnly cookie)
-- Sidebar spaces/lists, My Work, overdue
-- List / board: задачи, статусы, quick add, move/status, **filter bar**, **saved views**, **create from template**
-- Карточка: title, priority, due, description, assignees, comments, checklist; host deep-link при `domainEntity*`
-- Inbox (`#/inbox`): read / snooze / clear / read-all (badge в сайдбаре обновляется ~60s)
-- Host (`#/host/:entityType/:entityId`): ensure list + задачи сущности
+- Личный кабинет `#/me`: сводка, профиль, доступы, уведомления, смена пароля
+- Админ `#/people`: заведение сотрудников, одноразовый пароль, деактивация
+- Первый вход: `#/change-password` при `mustChangePassword`
+- Sidebar + My Work: скоупы `?scope=`, счётчики из `GET /me/summary`, **бакеты** из `GET /me/buckets`
+- QuickAdd на `#/`: title / assignee / due / brand
+- List / board: задачи, статусы, move/status, filter bar, saved views, create from template, **расписания**, **редактор колонок**, **calendar month nav**
+- Карточка: title, priority, due, description, assignees, comments, checklist, **приёмка** (review), hostEntity, **тип задачи**, **«Я застрял»**
+- Inbox (`#/inbox`): read / snooze / clear / read-all; **browser push** при новых unread (разрешение в браузере)
+- Host: `#/brands` (+ **ключ 1С** `externalKey`), `#/host/:entityType/:entityId`, brand picker в TaskPanel
+- Обзор владельца: `#/overview` (incl. **rescheduled**)
+- Коллега: `#/users/:id`
 - Favorites через API
 
-## Ещё заглушки
+## Backlog (UI)
 
-- Automations — отдельно (Phase C remainder)
-- Named shared views polish / reorder — позже
-- Email/push уведомления — только in-app inbox
+- CSV import (F10) — нет
+- Custom fields — нет
+- Timeline view polish — open
+- Automations UI — Phase C
+- Email push — только in-app + browser notification
 
 ## Скрипты
 
@@ -47,7 +56,7 @@ npm run dev
 | ------- | ---------- |
 | `npm run dev` | Vite HMR |
 | `npm run build` | `tsc -b` + production bundle |
-| `npm run test` | Vitest (mechanics, filters) |
+| `npm run test` | Vitest (mechanics, filters, my-work) |
 | `npm run lint` | Oxlint |
 | `npm run preview` | preview + proxy `/api` |
 
@@ -62,7 +71,7 @@ npm run dev
 | `store.tsx` | состояние + optimistic status/move с rollback |
 | `App.tsx` | `HashRouter` (`#/lists/...`) для статического деплоя |
 
-Дизайн: [docs/DESIGN_SYSTEM.md](../DESIGN_SYSTEM.md).
+Дизайн: [docs/DESIGN_SYSTEM.md](../docs/DESIGN_SYSTEM.md).
 
 ## Render
 

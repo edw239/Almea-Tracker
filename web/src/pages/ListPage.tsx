@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { BoardView } from '../components/BoardView'
+import { Select } from '../components/Select'
 import { TaskPanel } from '../components/TaskPanel'
 import { Avatars, QuickAdd, StatusChip, TaskRow } from '../components/ui'
 import { ApiError, api } from '../lib/api'
@@ -12,11 +13,11 @@ import {
   parseFiltersToDraft,
   type FilterDraft,
 } from '../lib/filters'
-import { byPosition, formatDay, isoDate, monthGrid, startOfDay, PRIORITY_LABEL, STATUS_LABEL } from '../lib/format'
+import { byPosition, formatDay, formatMonthYear, isoDate, monthGrid, startOfDay, PRIORITY_LABEL, STATUS_LABEL } from '../lib/format'
 import { groupTasks, type GroupBy } from '../lib/mechanics'
 import { boardColumns, resolveStatusesForList } from '../lib/status'
 import { useStore } from '../store'
-import type { Task, TaskPriority, TaskStatus, ViewType } from '../types'
+import type { ListStatus, Task, TaskPriority, TaskStatus, ViewType } from '../types'
 
 const VIEWS: { id: ViewType; label: string }[] = [
   { id: 'LIST', label: 'Список' },
@@ -44,6 +45,13 @@ type SavedView = {
 }
 
 type TemplateRow = { id: string; name: string }
+type ScheduleRow = {
+  id: string
+  title: string
+  frequency: string
+  nextRunAt: string
+  isActive: boolean
+}
 
 export function ListPage() {
   const { listId } = useParams()
@@ -59,20 +67,32 @@ export function ListPage() {
   const [savedViews, setSavedViews] = useState<SavedView[]>([])
   const [activeViewId, setActiveViewId] = useState('')
   const [templates, setTemplates] = useState<TemplateRow[]>([])
+  const [schedules, setSchedules] = useState<ScheduleRow[]>([])
   const [busy, setBusy] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
+  const [statusEditorOpen, setStatusEditorOpen] = useState(false)
 
   const reportError = useCallback((error: unknown, fallback: string) => {
     setActionError(error instanceof ApiError ? error.message : fallback)
   }, [])
 
   const reloadExtras = useCallback(async (id: string) => {
-    const [views, tpls] = await Promise.all([
+    const [views, tpls, scheds] = await Promise.all([
       api.listViews(id).catch(() => []),
       api.listTemplates(id).catch(() => []),
+      api.listSchedules(id).catch(() => []),
     ])
     setSavedViews(views)
     setTemplates(tpls.map((item) => ({ id: item.id, name: item.name })))
+    setSchedules(
+      scheds.map((item) => ({
+        id: item.id,
+        title: item.title,
+        frequency: item.frequency,
+        nextRunAt: item.nextRunAt,
+        isActive: item.isActive,
+      })),
+    )
   }, [])
 
   useEffect(() => {
@@ -206,6 +226,48 @@ export function ListPage() {
     [appliedFilters, listId, reportError, store],
   )
 
+  const createWeeklySchedule = useCallback(async () => {
+    if (!listId) return
+    const title = window.prompt('Название расписания', 'Еженедельный пакет')
+    if (!title?.trim()) return
+    setBusy(true)
+    setActionError(null)
+    try {
+      const timezone =
+        Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Dubai'
+      await api.createSchedule(listId, {
+        title: title.trim(),
+        frequency: 'WEEKLY',
+        byWeekday: 1,
+        atMinute: 9 * 60,
+        timezone,
+        templateId: templates[0]?.id,
+        dueInDays: 2,
+      })
+      await reloadExtras(listId)
+    } catch (error) {
+      reportError(error, 'Не удалось создать расписание')
+    } finally {
+      setBusy(false)
+    }
+  }, [listId, reloadExtras, reportError, templates])
+
+  const toggleSchedule = useCallback(
+    async (scheduleId: string, isActive: boolean) => {
+      setBusy(true)
+      setActionError(null)
+      try {
+        await api.updateSchedule(scheduleId, { isActive: !isActive })
+        if (listId) await reloadExtras(listId)
+      } catch (error) {
+        reportError(error, 'Не удалось обновить расписание')
+      } finally {
+        setBusy(false)
+      }
+    },
+    [listId, reloadExtras, reportError],
+  )
+
   const tasks = useMemo(() => {
     if (!list) return []
     return store.tasks.filter((task) => task.listId === list.id && !task.parentTaskId).sort(byPosition)
@@ -253,27 +315,30 @@ export function ListPage() {
                 )
               })}
             </div>
-            <select
+            <Select
+              variant="toolbar"
+              aria-label="Группировка"
               value={groupBy}
-              onChange={(event) => {
-                const next = event.target.value as GroupBy
+              options={GROUP_OPTIONS.map((item) => ({ value: item.id, label: item.label }))}
+              onChange={(next) => {
                 setGroupBy(next)
                 void api.putViewPreference({ listId: list.id, groupBy: next, viewType: view })
               }}
-              aria-label="Группировка"
-            >
-              {GROUP_OPTIONS.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.label}
-                </option>
-              ))}
-            </select>
-            <select
+            />
+            <Select
+              variant="toolbar"
               aria-label="Сохранённые виды"
               value={activeViewId}
               disabled={busy}
-              onChange={(event) => {
-                const id = event.target.value
+              placeholder="Виды…"
+              options={[
+                { value: '', label: 'Виды…' },
+                ...savedViews.map((item) => ({
+                  value: item.id,
+                  label: `${item.name}${item.isShared ? ' · shared' : ''}`,
+                })),
+              ]}
+              onChange={(id) => {
                 if (!id) {
                   setActiveViewId('')
                   return
@@ -281,15 +346,7 @@ export function ListPage() {
                 const saved = savedViews.find((item) => item.id === id)
                 if (saved) applySavedView(saved)
               }}
-            >
-              <option value="">Виды…</option>
-              {savedViews.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.name}
-                  {item.isShared ? ' · shared' : ''}
-                </option>
-              ))}
-            </select>
+            />
             <button type="button" className="ghost" disabled={busy} onClick={() => void saveCurrentView()}>
               Сохранить вид
             </button>
@@ -301,8 +358,19 @@ export function ListPage() {
             <button type="button" className="ghost" onClick={() => void store.toggleFavorite('TASK_LIST', list.id)}>
               {starred ? 'В избранном' : 'В избранное'}
             </button>
+            <button type="button" className="ghost" onClick={() => setStatusEditorOpen(true)}>
+              Колонки
+            </button>
           </div>
         </header>
+        {statusEditorOpen ? (
+          <StatusEditorPanel
+            listId={list.id}
+            statuses={statuses}
+            onClose={() => setStatusEditorOpen(false)}
+            onChanged={() => void store.refreshListStatuses(list.id)}
+          />
+        ) : null}
         <div className="content">
           <form
             className="filter-bar"
@@ -319,46 +387,47 @@ export function ListPage() {
               })
             }}
           >
-            <select
+            <Select
+              variant="toolbar"
               aria-label="Статус"
               value={filterDraft.status}
-              onChange={(event) =>
-                setFilterDraft((prev) => ({ ...prev, status: event.target.value as TaskStatus | '' }))
-              }
-            >
-              <option value="">Статус</option>
-              {(Object.keys(STATUS_LABEL) as TaskStatus[]).map((key) => (
-                <option key={key} value={key}>
-                  {STATUS_LABEL[key]}
-                </option>
-              ))}
-            </select>
-            <select
+              placeholder="Статус"
+              options={[
+                { value: '', label: 'Статус' },
+                ...(Object.keys(STATUS_LABEL) as TaskStatus[]).map((key) => ({
+                  value: key,
+                  label: STATUS_LABEL[key],
+                })),
+              ]}
+              onChange={(status) => setFilterDraft((prev) => ({ ...prev, status: status as TaskStatus | '' }))}
+            />
+            <Select
+              variant="toolbar"
               aria-label="Приоритет"
               value={filterDraft.priority}
-              onChange={(event) =>
-                setFilterDraft((prev) => ({ ...prev, priority: event.target.value as TaskPriority | '' }))
+              placeholder="Приоритет"
+              options={[
+                { value: '', label: 'Приоритет' },
+                ...(Object.keys(PRIORITY_LABEL) as TaskPriority[]).map((key) => ({
+                  value: key,
+                  label: PRIORITY_LABEL[key],
+                })),
+              ]}
+              onChange={(priority) =>
+                setFilterDraft((prev) => ({ ...prev, priority: priority as TaskPriority | '' }))
               }
-            >
-              <option value="">Приоритет</option>
-              {(Object.keys(PRIORITY_LABEL) as TaskPriority[]).map((key) => (
-                <option key={key} value={key}>
-                  {PRIORITY_LABEL[key]}
-                </option>
-              ))}
-            </select>
-            <select
+            />
+            <Select
+              variant="toolbar"
               aria-label="Исполнитель"
               value={filterDraft.assigneeId}
-              onChange={(event) => setFilterDraft((prev) => ({ ...prev, assigneeId: event.target.value }))}
-            >
-              <option value="">Исполнитель</option>
-              {store.users.map((user) => (
-                <option key={user.id} value={user.id}>
-                  {user.name}
-                </option>
-              ))}
-            </select>
+              placeholder="Исполнитель"
+              options={[
+                { value: '', label: 'Исполнитель' },
+                ...store.users.map((user) => ({ value: user.id, label: user.name })),
+              ]}
+              onChange={(assigneeId) => setFilterDraft((prev) => ({ ...prev, assigneeId }))}
+            />
             <input
               aria-label="Название"
               placeholder="Название содержит…"
@@ -390,24 +459,42 @@ export function ListPage() {
           </form>
 
           <div className="template-bar">
-            <select
+            <Select
+              variant="toolbar"
               aria-label="Шаблон"
-              defaultValue=""
+              value=""
               disabled={busy || templates.length === 0}
-              onChange={(event) => {
-                const templateId = event.target.value
-                event.target.value = ''
+              placeholder={templates.length ? 'Создать из шаблона…' : 'Нет шаблонов'}
+              options={templates.map((item) => ({ value: item.id, label: item.name }))}
+              onChange={(templateId) => {
                 if (templateId) void createFromTemplate(templateId)
               }}
-            >
-              <option value="">{templates.length ? 'Создать из шаблона…' : 'Нет шаблонов'}</option>
-              {templates.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.name}
-                </option>
-              ))}
-            </select>
+            />
+            <button type="button" className="ghost" disabled={busy} onClick={() => void createWeeklySchedule()}>
+              + Расписание (пн 09:00)
+            </button>
           </div>
+
+          {schedules.length > 0 ? (
+            <div className="schedule-bar">
+              {schedules.map((item) => (
+                <div key={item.id} className="schedule-chip">
+                  <span>
+                    {item.title} · {item.frequency}
+                    {item.isActive ? '' : ' (выкл)'} · след. {formatDay(item.nextRunAt)}
+                  </span>
+                  <button
+                    type="button"
+                    className="ghost"
+                    disabled={busy}
+                    onClick={() => void toggleSchedule(item.id, item.isActive)}
+                  >
+                    {item.isActive ? 'Выкл' : 'Вкл'}
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : null}
 
           {selectedIds.length > 0 ? (
             <div className="bulk-bar">
@@ -538,33 +625,196 @@ function TableView({
 
 function CalendarView({ listId, onOpen }: { listId: string; onOpen: (id: string) => void }) {
   const store = useStore()
-  const days = useMemo(() => monthGrid(new Date()), [])
+  const [anchor, setAnchor] = useState(() => startOfDay(new Date()))
+  const days = useMemo(() => monthGrid(anchor), [anchor])
   const today = isoDate(startOfDay(new Date()))
   const tasks = store.tasks.filter((task) => task.listId === listId && task.dueDate)
   const heads = ['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс']
-  const month = new Date().getMonth()
+  const month = anchor.getMonth()
 
   return (
-    <div className="calendar">
-      {heads.map((head) => (
-        <div className="cal-head" key={head}>
-          {head}
-        </div>
-      ))}
-      {days.map((day) => {
-        const key = isoDate(day)
-        const items = tasks.filter((task) => task.dueDate === key)
-        return (
-          <div key={key} className={`cal-cell ${day.getMonth() !== month ? 'out' : ''} ${key === today ? 'today' : ''}`}>
-            <div className="cal-day">{formatDay(key)}</div>
-            {items.map((task) => (
-              <button key={task.id} type="button" className="cal-task" onClick={() => onOpen(task.id)}>
-                {task.title}
-              </button>
-            ))}
+    <div>
+      <div className="top-actions" style={{ marginBottom: 12 }}>
+        <button
+          type="button"
+          className="ghost"
+          aria-label="Предыдущий месяц"
+          onClick={() => setAnchor((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))}
+        >
+          ←
+        </button>
+        <strong>{formatMonthYear(anchor)}</strong>
+        <button
+          type="button"
+          className="ghost"
+          aria-label="Следующий месяц"
+          onClick={() => setAnchor((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))}
+        >
+          →
+        </button>
+        <button type="button" className="ghost" onClick={() => setAnchor(startOfDay(new Date()))}>
+          Сегодня
+        </button>
+      </div>
+      <div className="calendar">
+        {heads.map((head) => (
+          <div className="cal-head" key={head}>
+            {head}
           </div>
-        )
-      })}
+        ))}
+        {days.map((day) => {
+          const key = isoDate(day)
+          const items = tasks.filter((task) => task.dueDate === key)
+          return (
+            <div key={key} className={`cal-cell ${day.getMonth() !== month ? 'out' : ''} ${key === today ? 'today' : ''}`}>
+              <div className="cal-day">{formatDay(key)}</div>
+              {items.map((task) => (
+                <button key={task.id} type="button" className="cal-task" onClick={() => onOpen(task.id)}>
+                  {task.title}
+                </button>
+              ))}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+function StatusEditorPanel({
+  listId,
+  statuses,
+  onClose,
+  onChanged,
+}: {
+  listId: string
+  statuses: ListStatus[]
+  onClose: () => void
+  onChanged: () => void
+}) {
+  const [name, setName] = useState('')
+  const [color, setColor] = useState('#64748b')
+  const [category, setCategory] = useState<TaskStatus>('OPEN')
+  const [error, setError] = useState<string | null>(null)
+  const [pending, setPending] = useState(false)
+
+  async function createStatus(event: FormEvent) {
+    event.preventDefault()
+    setPending(true)
+    setError(null)
+    try {
+      await api.createListStatus(listId, { name: name.trim(), color, category })
+      setName('')
+      onChanged()
+    } catch (caught) {
+      setError(caught instanceof ApiError ? caught.message : 'Не удалось создать колонку')
+    } finally {
+      setPending(false)
+    }
+  }
+
+  async function saveStatus(status: ListStatus, patch: Partial<{ name: string; color: string; category: TaskStatus }>) {
+    setPending(true)
+    setError(null)
+    try {
+      await api.updateListStatus(status.id, patch)
+      onChanged()
+    } catch (caught) {
+      setError(caught instanceof ApiError ? caught.message : 'Не удалось сохранить')
+    } finally {
+      setPending(false)
+    }
+  }
+
+  async function removeStatus(status: ListStatus) {
+    const others = statuses.filter((item) => item.id !== status.id)
+    if (others.length === 0) {
+      setError('Нельзя удалить последнюю колонку')
+      return
+    }
+    setPending(true)
+    setError(null)
+    try {
+      await api.deleteListStatus(status.id, others[0]?.id)
+      onChanged()
+    } catch (caught) {
+      setError(caught instanceof ApiError ? caught.message : 'Не удалось удалить')
+    } finally {
+      setPending(false)
+    }
+  }
+
+  return (
+    <div className="me-panel" style={{ margin: '0 24px 16px' }}>
+      <div className="group-h">
+        <h2>Колонки списка</h2>
+        <button type="button" className="ghost" onClick={onClose}>
+          Закрыть
+        </button>
+      </div>
+      {error ? <p className="form-error">{error}</p> : null}
+      <div className="card-list">
+        {statuses.map((status) => (
+          <div key={status.id} className="task-row" style={{ display: 'grid', gap: 8 }}>
+            <input
+              defaultValue={status.name}
+              aria-label="Название колонки"
+              disabled={pending}
+              onBlur={(event) => {
+                const next = event.target.value.trim()
+                if (next && next !== status.name) void saveStatus(status, { name: next })
+              }}
+            />
+            <div className="top-actions">
+              <input
+                type="color"
+                value={status.color}
+                aria-label="Цвет"
+                disabled={pending}
+                onChange={(event) => void saveStatus(status, { color: event.target.value })}
+              />
+              <Select
+                variant="toolbar"
+                value={status.category}
+                aria-label="Категория"
+                disabled={pending}
+                options={(Object.keys(STATUS_LABEL) as TaskStatus[]).map((key) => ({
+                  value: key,
+                  label: STATUS_LABEL[key],
+                }))}
+                onChange={(category) => void saveStatus(status, { category })}
+              />
+              <button type="button" className="ghost" disabled={pending} onClick={() => void removeStatus(status)}>
+                Удалить
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+      <form className="top-actions" onSubmit={(event) => void createStatus(event)} style={{ marginTop: 12 }}>
+        <input
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+          placeholder="Новая колонка"
+          required
+          disabled={pending}
+        />
+        <input type="color" value={color} onChange={(event) => setColor(event.target.value)} disabled={pending} />
+        <Select
+          variant="toolbar"
+          value={category}
+          aria-label="Категория колонки"
+          disabled={pending}
+          options={(Object.keys(STATUS_LABEL) as TaskStatus[]).map((key) => ({
+            value: key,
+            label: STATUS_LABEL[key],
+          }))}
+          onChange={setCategory}
+        />
+        <button type="submit" className="pill" disabled={pending}>
+          Добавить
+        </button>
+      </form>
     </div>
   )
 }

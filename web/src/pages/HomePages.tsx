@@ -1,9 +1,17 @@
-import { useEffect } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 import { QuickAdd, TaskRow } from '../components/ui'
-import { isAssignedTo, isDueSoon, isOverdue } from '../lib/format'
+import type { MyWorkScope } from '../lib/api'
+import { isOverdue } from '../lib/format'
 import { useStore } from '../store'
 import type { Task } from '../types'
+
+type WorkBuckets = {
+  overdue: Task[]
+  today: Task[]
+  later: Task[]
+  none: Task[]
+}
 
 function Section({ title, tasks, onOpen }: { title: string; tasks: Task[]; onOpen: (id: string) => void }) {
   if (tasks.length === 0) return null
@@ -22,16 +30,59 @@ function Section({ title, tasks, onOpen }: { title: string; tasks: Task[]; onOpe
   )
 }
 
+const SCOPE_OPTIONS: Array<{ id: MyWorkScope; label: string }> = [
+  { id: 'default', label: 'Все' },
+  { id: 'untriaged', label: 'Неразобранные' },
+  { id: 'review', label: 'На проверке' },
+  { id: 'assigned', label: 'Исполнитель' },
+  { id: 'owned', label: 'Владелец' },
+  { id: 'created', label: 'Поставил' },
+  { id: 'waiting', label: 'Жду' },
+  { id: 'watching', label: 'Наблюдаю' },
+  { id: 'mentions', label: 'Упоминания' },
+  { id: 'checklist', label: 'Чеклист' },
+]
+
+function parseScope(raw: string | null): MyWorkScope {
+  const hit = SCOPE_OPTIONS.find((item) => item.id === raw)
+  return hit?.id ?? 'default'
+}
+
 export function MyWorkPage() {
   const store = useStore()
   const navigate = useNavigate()
+  const [params, setParams] = useSearchParams()
+  const scope = parseScope(params.get('scope'))
   const inboxId = store.personalInboxListId
-  const mine = store.tasks.filter((task) => !task.parentTaskId && isAssignedTo(task, store.currentUserId))
+  const [buckets, setBuckets] = useState<WorkBuckets | null>(null)
+  const [loadingScope, setLoadingScope] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      setLoadingScope(true)
+      const next = await store.loadMyWorkBuckets(scope)
+      if (!cancelled) {
+        setBuckets(next)
+        setLoadingScope(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [scope, store.loadMyWorkBuckets])
+
   const open = (id: string) => navigate(`/tasks/${id}`)
-  const overdue = mine.filter((task) => isOverdue(task))
-  const today = mine.filter((task) => isDueSoon(task) && !isOverdue(task))
-  const later = mine.filter((task) => task.dueDate && !isOverdue(task) && !isDueSoon(task) && task.status !== 'DONE')
-  const none = mine.filter((task) => !task.dueDate && task.status !== 'DONE' && task.status !== 'CANCELLED')
+  const source = buckets ?? { overdue: [], today: [], later: [], none: [] }
+  const totalCount =
+    source.overdue.length + source.today.length + source.later.length + source.none.length
+
+  const setScope = (next: MyWorkScope) => {
+    const nextParams = new URLSearchParams(params)
+    if (next === 'default') nextParams.delete('scope')
+    else nextParams.set('scope', next)
+    setParams(nextParams, { replace: true })
+  }
 
   return (
     <>
@@ -40,7 +91,8 @@ export function MyWorkPage() {
           <div className="kicker">My Work</div>
           <h1 className="page-title">Что требует внимания</h1>
           <p className="page-lead">
-            Только задачи, где вы исполнитель. Захват во входящие — внизу, командная работа — в дереве слева.
+            Задачи, где вы исполнитель или владелец. Другие роли — переключателем ниже. Захват во
+            входящие — внизу, командная работа — в дереве слева.
           </p>
           {store.error ? <p className="form-error">{store.error}</p> : null}
         </div>
@@ -51,29 +103,63 @@ export function MyWorkPage() {
         ) : null}
       </header>
       <div className="content">
+        <div className="seg me-tabs" role="tablist" aria-label="Скоуп My Work">
+          {SCOPE_OPTIONS.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              role="tab"
+              aria-selected={scope === item.id}
+              className={scope === item.id ? 'active' : undefined}
+              onClick={() => setScope(item.id)}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+
         <div className="stats">
           <div className="stat">
-            <b>{overdue.length}</b>
+            <b>{store.summary?.overdue ?? 0}</b>
             <span>просрочено</span>
           </div>
           <div className="stat">
-            <b>{today.length}</b>
+            <b>{store.summary?.today ?? 0}</b>
             <span>сегодня</span>
           </div>
           <div className="stat">
-            <b>{mine.filter((task) => task.status === 'IN_PROGRESS').length}</b>
+            <b>{store.summary?.inProgress ?? 0}</b>
             <span>в работе</span>
           </div>
           <div className="stat">
-            <b>{store.notifications.filter((item) => !item.read).length}</b>
+            <b>{store.summary?.untriaged ?? 0}</b>
+            <span>неразобранных</span>
+          </div>
+          <div className="stat">
+            <b>{store.summary?.unread ?? 0}</b>
             <span>непрочитанных</span>
           </div>
         </div>
-        <Section title="Просрочено" tasks={overdue} onOpen={open} />
-        <Section title="Сегодня" tasks={today} onOpen={open} />
-        <Section title="Дальше по сроку" tasks={later} onOpen={open} />
-        <Section title="Без даты" tasks={none} onOpen={open} />
-        {inboxId ? <QuickAdd listId={inboxId} placeholder="Захватить во входящие…" /> : null}
+
+        {loadingScope ? <p className="muted">Загрузка…</p> : null}
+        {!loadingScope && totalCount === 0 ? (
+          <p className="muted">В этом скоупе пока нет задач.</p>
+        ) : null}
+
+        <Section title="Просрочено" tasks={source.overdue} onOpen={open} />
+        <Section title="Сегодня" tasks={source.today} onOpen={open} />
+        <Section title="Дальше по сроку" tasks={source.later} onOpen={open} />
+        <Section title="Без даты" tasks={source.none} onOpen={open} />
+        {inboxId && (scope === 'default' || scope === 'untriaged') ? (
+          <QuickAdd
+            listId={inboxId}
+            placeholder="Заголовок → исполнитель → срок → бренд"
+            onCreated={() => {
+              void store.loadMyWorkBuckets(scope).then(setBuckets)
+              void store.loadSummary()
+            }}
+          />
+        ) : null}
       </div>
     </>
   )
@@ -85,9 +171,10 @@ export function OverduePage() {
 
   useEffect(() => {
     void store.loadOverdue()
-  }, [store])
+  }, [store.loadOverdue])
 
   const tasks = store.tasks.filter((task) => isOverdue(task) && !task.parentTaskId)
+
   return (
     <>
       <header className="topbar">
@@ -109,55 +196,7 @@ export function OverduePage() {
 }
 
 export function WeekPage() {
-  const store = useStore()
-  const navigate = useNavigate()
-  const decisions = store.tasks
-    .filter((task) => task.assigneeIds.includes(store.currentUserId) && task.priority === 'URGENT')
-    .slice(0, 8)
-  const brandLists = store.lists.filter((list) => !list.systemKey).slice(0, 6)
-
-  return (
-    <>
-      <header className="topbar">
-        <div>
-          <div className="kicker">CEO briefing</div>
-          <h1 className="page-title">Неделя: решения, не активность</h1>
-          <p className="page-lead">Срочные задачи, где вы исполнитель, и быстрый вход в списки.</p>
-        </div>
-      </header>
-      <div className="content">
-        <section className="group">
-          <div className="group-h">
-            <h2>Нужно ваше решение</h2>
-          </div>
-          <div className="card-list">
-            {decisions.map((task) => (
-              <TaskRow key={task.id} task={task} onOpen={() => navigate(`/tasks/${task.id}`)} />
-            ))}
-          </div>
-        </section>
-        <section className="group">
-          <div className="group-h">
-            <h2>Списки</h2>
-          </div>
-          <div className="space-grid">
-            {brandLists.map((list) => {
-              const open = store.tasks.filter(
-                (task) => task.listId === list.id && task.status !== 'DONE' && task.status !== 'CANCELLED',
-              )
-              return (
-                <Link key={list.id} to={`/lists/${list.id}`} className="space-card">
-                  <h3>{list.name}</h3>
-                  <p>{open.length} открытых задач. Клик — список и доска.</p>
-                  <span>открыть list</span>
-                </Link>
-              )
-            })}
-          </div>
-        </section>
-      </div>
-    </>
-  )
+  return <Navigate to="/overview" replace />
 }
 
 export function FavoritesPage() {

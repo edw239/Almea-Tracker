@@ -7,24 +7,30 @@ import {
   type DragEndEvent,
 } from '@dnd-kit/core'
 import { useEffect, useState } from 'react'
-import { NavLink, Outlet, useLocation } from 'react-router-dom'
+import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
 import { useAuth } from '../auth'
-import { initialsFromName, isAssignedTo, isOverdue } from '../lib/format'
+import { ensureNotificationPermission } from '../lib/browser-notifications'
+import { initialsFromName } from '../lib/format'
 import { listDropId, parseListDropId } from '../lib/mechanics'
 import { useStore } from '../store'
 import {
+  IconBrand,
   IconChevron,
   IconFavorites,
   IconInbox,
-  IconList,
   IconLogout,
   IconMyWork,
   IconOverdue,
+  IconPeople,
   IconWeek,
-  spaceMark,
 } from './icons'
 
 const SIDEBAR_COLLAPSED_KEY = 'almea.sidebar.collapsed'
+
+function treeInitial(name: string): string {
+  const trimmed = name.trim()
+  return trimmed ? trimmed[0]!.toLocaleUpperCase('ru-RU') : '·'
+}
 
 function ListDropLink({
   listId,
@@ -44,10 +50,12 @@ function ListDropLink({
         to={`/lists/${listId}`}
         title={collapsed ? name : undefined}
         className={({ isActive }) =>
-          `tree-link ${nested ? 'nested' : ''} ${isActive ? 'active' : ''} ${collapsed ? 'icon-only' : ''}`
+          `tree-link ${nested ? 'nested' : ''} ${isActive ? 'active' : ''}`
         }
       >
-        <IconList />
+        <span className="tree-mark" aria-hidden>
+          {treeInitial(name)}
+        </span>
         <span className="nav-text">{name}</span>
       </NavLink>
     </div>
@@ -79,18 +87,22 @@ export function AppShell() {
   }, [collapsed])
 
   useEffect(() => {
+    if (auth.user?.mustChangePassword) return
+    void ensureNotificationPermission()
     void store.loadNotifications()
+    void store.loadSummary()
     const timer = window.setInterval(() => {
       void store.loadNotifications()
+      void store.loadSummary()
     }, 60_000)
     return () => window.clearInterval(timer)
-  }, [store.loadNotifications])
+  }, [auth.user?.mustChangePassword, store.loadNotifications, store.loadSummary])
 
   if (!user) return null
   const initials = initialsFromName(user.name)
-  const mine = store.tasks.filter((task) => isAssignedTo(task, store.currentUserId) && !task.parentTaskId)
-  const overdue = mine.filter((task) => isOverdue(task)).length
-  const unread = store.notifications.filter((item) => !item.read).length
+  const mineCount = store.summary?.mineOpen ?? 0
+  const overdue = store.summary?.overdue ?? 0
+  const unread = store.summary?.unread ?? 0
 
   const spaces = store.spaces.map((space) => {
     const folders = store.folders.filter((folder) => folder.spaceId === space.id)
@@ -125,15 +137,15 @@ export function AppShell() {
             >
               <IconMyWork />
               <span className="nav-text">Моя работа</span>
-              <span className="nav-count">{mine.length}</span>
+              <span className="nav-count">{mineCount}</span>
             </NavLink>
             <NavLink
-              to="/week"
-              title="Неделя CEO"
+              to="/overview"
+              title="Обзор"
               className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
             >
               <IconWeek />
-              <span className="nav-text">Неделя CEO</span>
+              <span className="nav-text">Обзор</span>
             </NavLink>
             <NavLink
               to="/overdue"
@@ -165,20 +177,38 @@ export function AppShell() {
               <IconFavorites />
               <span className="nav-text">Избранное</span>
             </NavLink>
+            <NavLink
+              to="/brands"
+              title="Бренды"
+              className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
+            >
+              <IconBrand />
+              <span className="nav-text">Бренды</span>
+            </NavLink>
+            {user.role === 'GLOBAL_ADMIN' ? (
+              <NavLink
+                to="/people"
+                title="Люди"
+                className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
+              >
+                <IconPeople />
+                <span className="nav-text">Люди</span>
+              </NavLink>
+            ) : null}
           </nav>
 
           <div className="tree">
             <div className="nav-label">Пространства</div>
-            {spaces.map(({ space, folders, lists }) => {
-              const SpaceIcon = spaceMark(space.systemKey)
-              return (
+            {spaces.map(({ space, folders, lists }) => (
               <div key={space.id} className="tree-branch">
                 <NavLink
                   to={`/spaces/${space.id}`}
-                  title={space.name}
-                  className={({ isActive }) => `tree-space ${isActive ? 'active' : ''} ${collapsed ? 'icon-only' : ''}`}
+                  title={collapsed ? space.name : undefined}
+                  className={({ isActive }) => `tree-space ${isActive ? 'active' : ''}`}
                 >
-                  <SpaceIcon />
+                  <span className="tree-mark" aria-hidden>
+                    {treeInitial(space.name)}
+                  </span>
                   <span className="nav-text">{space.name}</span>
                 </NavLink>
                 {lists
@@ -208,19 +238,18 @@ export function AppShell() {
                   </div>
                 ))}
               </div>
-              )
-            })}
+            ))}
           </div>
 
           <div className="sidebar-foot">
             <div className="user-row">
-              <div className="user-chip" title={`${user.name} · ${user.email}`}>
+              <Link className="user-chip" to="/me" title={`${user.name} · ${user.email}`}>
                 <span className="avatar">{initials}</span>
                 <div className="user-meta">
                   <div>{user.name}</div>
                   <small>{user.email}</small>
                 </div>
-              </div>
+              </Link>
               <button
                 type="button"
                 className="logout-btn"

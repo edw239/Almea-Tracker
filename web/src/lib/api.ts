@@ -1,5 +1,5 @@
 import type { FavoriteEntityType, TaskPriority, TaskStatus, ViewType } from '../types'
-import type { ApiListStatus, ApiSpace, ApiTask, ApiUser } from './mappers'
+import type { ApiListStatus, ApiSpace, ApiTask } from './mappers'
 
 const DEFAULT_TIMEOUT_MS = 15_000
 
@@ -8,6 +8,177 @@ export type AuthUser = {
   email: string
   name: string
   role: 'GLOBAL_ADMIN' | 'MEMBER'
+  mustChangePassword: boolean
+}
+
+export type MyWorkScope =
+  | 'default'
+  | 'assigned'
+  | 'owned'
+  | 'watching'
+  | 'mentions'
+  | 'checklist'
+  | 'created'
+  | 'waiting'
+  | 'untriaged'
+  | 'review'
+
+export type MeMembership = {
+  spaceId: string
+  spaceName: string
+  systemKey: string | null
+  isSystem: boolean
+  role: 'OWNER' | 'MEMBER' | 'VIEWER'
+}
+
+export type MeProfile = {
+  id: string
+  email: string
+  name: string
+  role: 'GLOBAL_ADMIN' | 'MEMBER'
+  timezone: string
+  locale: string
+  jobTitle: string | null
+  createdAt: string
+  passwordChangedAt: string | null
+  mustChangePassword: boolean
+  memberships: MeMembership[]
+}
+
+export type MeProfilePatch = {
+  name?: string
+  timezone?: string
+  locale?: 'ru' | 'en'
+  jobTitle?: string | null
+}
+
+export type NotificationSettingsCode = {
+  code: string
+  inApp: boolean
+}
+
+export type NotificationSettings = {
+  quietHoursFrom: number | null
+  quietHoursTo: number | null
+  snoozeHoursDefault: number
+  codes: NotificationSettingsCode[]
+}
+
+export type NotificationSettingsPatch = {
+  codes: NotificationSettingsCode[]
+  quietHoursFrom?: number | null
+  quietHoursTo?: number | null
+  snoozeHoursDefault?: number | null
+}
+
+export type MeSummary = {
+  timezone: string
+  asOf: string
+  overdue: number
+  today: number
+  week: number
+  inProgress: number
+  mineOpen: number
+  untriaged: number
+  unread: number
+}
+
+export type OverviewTask = {
+  id: string
+  title: string
+  status: TaskStatus
+  listId: string
+  listName: string
+  dueDate: string | null
+  createdAt: string
+  updatedAt: string
+  submittedAt: string | null
+  assigneeIds: string[]
+}
+
+export type OverviewRescheduledTask = OverviewTask & {
+  dueDateMoveCount: number
+}
+
+export type OverviewResponse = {
+  timezone: string
+  asOf: string
+  scope: 'company' | 'visible'
+  unassigned: OverviewTask[]
+  stale: OverviewTask[]
+  blocked: OverviewTask[]
+  awaitingReview: OverviewTask[]
+  rescheduled: OverviewRescheduledTask[]
+  overdueByUser: Array<{
+    userId: string
+    userName: string
+    count: number
+    tasks: OverviewTask[]
+  }>
+}
+
+export type MeBucketsResponse = {
+  timezone: string
+  asOf: string
+  scope: MyWorkScope
+  overdue: ApiTask[]
+  today: ApiTask[]
+  later: ApiTask[]
+  none: ApiTask[]
+  inProgress: number
+}
+
+export type TaskTypeRow = {
+  id: string
+  spaceId: string
+  key: string
+  name: string
+  color: string
+  position: number
+  isSystem: boolean
+}
+
+export type MeActivityItem = {
+  id: string
+  action: string
+  details: unknown
+  createdAt: string
+  taskId: string
+  taskTitle: string
+}
+
+export type MeActivity = {
+  days: number
+  since: string
+  closed: number
+  comments: number
+  updates: number
+  items: MeActivityItem[]
+}
+
+export type DirectoryUser = {
+  id: string
+  email: string
+  name: string
+  role: 'GLOBAL_ADMIN' | 'MEMBER'
+  jobTitle: string | null
+  isActive: boolean
+}
+
+export type ProvisionedUser = DirectoryUser & { temporaryPassword: string }
+
+export type CreateUserBody = {
+  email: string
+  name: string
+  role?: 'GLOBAL_ADMIN' | 'MEMBER'
+  jobTitle?: string | null
+}
+
+export type UpdateUserBody = {
+  name?: string
+  role?: 'GLOBAL_ADMIN' | 'MEMBER'
+  jobTitle?: string | null
+  isActive?: boolean
 }
 
 export class ApiError extends Error {
@@ -33,6 +204,10 @@ export type TaskPatch = {
   domainEntityId?: string | null
   domainEntityType?: string | null
   domainLabel?: string | null
+  hostEntityId?: string | null
+  reviewRequired?: boolean
+  reviewRejectReason?: string
+  taskTypeId?: string | null
 }
 
 export type MovePatch = {
@@ -41,6 +216,7 @@ export type MovePatch = {
   status?: TaskStatus
   afterTaskId?: string | null
   position?: number
+  reviewRejectReason?: string
 }
 
 export type ListTasksPage = {
@@ -80,15 +256,64 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 
 export const api = {
   me: () => request<AuthUser>('/api/auth/me'),
+  profile: () => request<MeProfile>('/api/me'),
+  updateProfile: (patch: MeProfilePatch) =>
+    request<Omit<MeProfile, 'memberships'>>('/api/me', {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    }),
+  changePassword: (currentPassword: string, newPassword: string) =>
+    request<{ ok: true }>('/api/me/password', {
+      method: 'POST',
+      body: JSON.stringify({ currentPassword, newPassword }),
+    }),
+  notificationSettings: () => request<NotificationSettings>('/api/me/notification-settings'),
+  putNotificationSettings: (body: NotificationSettingsPatch) =>
+    request<NotificationSettings>('/api/me/notification-settings', {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    }),
+  meSummary: () => request<MeSummary>('/api/me/summary'),
+  meBuckets: (scope?: MyWorkScope) => {
+    const q = scope && scope !== 'default' ? `?scope=${encodeURIComponent(scope)}` : ''
+    return request<MeBucketsResponse>(`/api/me/buckets${q}`)
+  },
+  overview: () => request<OverviewResponse>('/api/overview'),
+  meActivity: (opts?: { days?: number; limit?: number }) => {
+    const q = new URLSearchParams()
+    if (opts?.days) q.set('days', String(opts.days))
+    if (opts?.limit) q.set('limit', String(opts.limit))
+    const suffix = q.toString() ? `?${q}` : ''
+    return request<MeActivity>(`/api/me/activity${suffix}`)
+  },
   login: (email: string, password: string) =>
     request<{ user: AuthUser }>('/api/auth/login', {
       method: 'POST',
       body: JSON.stringify({ email, password }),
     }),
   logout: () => request<{ ok: true }>('/api/auth/logout', { method: 'POST' }),
-  users: () => request<ApiUser[]>('/api/users'),
+  users: (includeInactive = false) =>
+    request<DirectoryUser[]>(`/api/users${includeInactive ? '?includeInactive=true' : ''}`),
+  createUser: (body: CreateUserBody) =>
+    request<ProvisionedUser>('/api/users', { method: 'POST', body: JSON.stringify(body) }),
+  updateUser: (userId: string, body: UpdateUserBody) =>
+    request<DirectoryUser>(`/api/users/${userId}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  resetUserPassword: (userId: string) =>
+    request<ProvisionedUser>(`/api/users/${userId}/reset-password`, { method: 'POST' }),
+  user: (userId: string) =>
+    request<{
+      id: string
+      name: string
+      role: string
+      jobTitle: string | null
+      stats: { open: number; overdue: number; shown: number } | null
+      tasks: ApiTask[]
+    }>(`/api/users/${userId}`),
   spaces: () => request<ApiSpace[]>('/api/task-spaces'),
-  myWork: () => request<ApiTask[]>('/api/tasks'),
+  myWork: (scope?: MyWorkScope) => {
+    const q = scope && scope !== 'default' ? `?scope=${encodeURIComponent(scope)}` : ''
+    return request<ApiTask[]>(`/api/tasks${q}`)
+  },
   overdue: () => request<ApiTask[]>('/api/tasks/overdue'),
   listTasks: (listId: string, opts?: { filters?: string; cursor?: string; limit?: number }) => {
     const q = new URLSearchParams()
@@ -100,10 +325,18 @@ export const api = {
   },
   listStatuses: (listId: string) => request<ApiListStatus[]>(`/api/task-lists/${listId}/statuses`),
   task: (taskId: string) => request<ApiTask>(`/api/tasks/${taskId}`),
-  createTask: (listId: string, title: string) =>
+  createTask: (
+    listId: string,
+    body: {
+      title: string
+      assigneeIds?: string[]
+      dueDate?: string | null
+      hostEntityId?: string | null
+    },
+  ) =>
     request<ApiTask>(`/api/task-lists/${listId}/tasks`, {
       method: 'POST',
-      body: JSON.stringify({ title }),
+      body: JSON.stringify(body),
     }),
   updateTask: (taskId: string, patch: TaskPatch) =>
     request<ApiTask>(`/api/tasks/${taskId}`, {
@@ -115,6 +348,34 @@ export const api = {
       method: 'PATCH',
       body: JSON.stringify(patch),
     }),
+  markStuck: (taskId: string, reason: string) =>
+    request<ApiTask>(`/api/tasks/${taskId}/stuck`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    }),
+  clearStuck: (taskId: string) => request<ApiTask>(`/api/tasks/${taskId}/stuck`, { method: 'DELETE' }),
+  createListStatus: (
+    listId: string,
+    body: { name: string; color: string; category: TaskStatus; order?: number },
+  ) =>
+    request<ApiListStatus>(`/api/task-lists/${listId}/statuses`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  updateListStatus: (
+    id: string,
+    body: Partial<{ name: string; color: string; category: TaskStatus; order: number; isDefault: boolean }>,
+  ) =>
+    request<ApiListStatus>(`/api/task-list-statuses/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
+  deleteListStatus: (id: string, reassignToStatusId?: string) =>
+    request<{ ok: true }>(`/api/task-list-statuses/${id}`, {
+      method: 'DELETE',
+      body: JSON.stringify(reassignToStatusId ? { reassignToStatusId } : {}),
+    }),
+  listTaskTypes: (spaceId: string) => request<TaskTypeRow[]>(`/api/task-spaces/${spaceId}/task-types`),
   bulkUpdate: (body: {
     taskIds: string[]
     status?: TaskStatus
@@ -176,6 +437,47 @@ export const api = {
     request<ApiTask[]>(`/api/task-lists/${listId}/tasks/from-template/${templateId}`, {
       method: 'POST',
     }),
+  listSchedules: (listId: string) =>
+    request<
+      Array<{
+        id: string
+        title: string
+        frequency: 'DAILY' | 'WEEKLY' | 'MONTHLY'
+        byWeekday: number | null
+        atMinute: number
+        timezone: string
+        isActive: boolean
+        nextRunAt: string
+        lastRunAt: string | null
+        templateId: string | null
+      }>
+    >(`/api/task-lists/${listId}/schedules`),
+  createSchedule: (
+    listId: string,
+    body: {
+      title: string
+      frequency: 'DAILY' | 'WEEKLY' | 'MONTHLY'
+      byWeekday?: number
+      byMonthday?: number
+      atMinute: number
+      timezone: string
+      templateId?: string
+      assigneeUserId?: string
+      dueInDays?: number
+    },
+  ) =>
+    request<{ id: string }>(`/api/task-lists/${listId}/schedules`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  updateSchedule: (
+    id: string,
+    body: { isActive?: boolean; title?: string; atMinute?: number },
+  ) =>
+    request(`/api/task-schedules/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
   favorites: () => request<Array<{ entityType: FavoriteEntityType; entityId: string }>>('/api/user-favorites'),
   addFavorite: (entityType: FavoriteEntityType, entityId: string) =>
     request('/api/user-favorites', {
@@ -208,15 +510,62 @@ export const api = {
     }),
   clearNotification: (id: string) => request(`/api/notifications/${id}/clear`, { method: 'PATCH' }),
   ensureHostEntity: (body: { entityType: string; entityId: string; name: string }) =>
-    request<{ list: { id: string }; entityType: string; entityId: string }>(
-      '/api/host/entity-lists/ensure',
-      { method: 'POST', body: JSON.stringify(body) },
-    ),
-  hostEntity: (entityType: string, entityId: string) =>
     request<{
+      list: { id: string }
       entityType: string
       entityId: string
+      hostEntity?: { id: string; entityType: string; name: string }
+    }>('/api/host/entity-lists/ensure', { method: 'POST', body: JSON.stringify(body) }),
+  hostEntity: (entityType: string, entityId: string) =>
+    request<{
+      entityType?: string
+      entityId?: string
+      id?: string
+      name?: string
       list: { id: string; name: string } | null
       tasks: ApiTask[]
     }>(`/api/host/entities/${encodeURIComponent(entityType)}/${encodeURIComponent(entityId)}`),
+  hostEntities: (opts?: { type?: string; query?: string; includeArchived?: boolean }) => {
+    const q = new URLSearchParams()
+    if (opts?.type) q.set('type', opts.type)
+    if (opts?.query) q.set('query', opts.query)
+    if (opts?.includeArchived) q.set('includeArchived', 'true')
+    q.set('visibleOnly', 'true')
+    const suffix = q.toString() ? `?${q}` : ''
+    return request<
+      Array<{
+        id: string
+        entityType: string
+        name: string
+        nameKey: string
+        externalKey: string | null
+        isArchived: boolean
+      }>
+    >(`/api/host-entities${suffix}`)
+  },
+  createHostEntity: (body: { entityType: string; name: string }) =>
+    request<{
+      id: string
+      entityType: string
+      name: string
+      nameKey: string
+      isArchived: boolean
+    }>('/api/host-entities', { method: 'POST', body: JSON.stringify(body) }),
+  getHostEntity: (id: string) =>
+    request<{
+      id: string
+      entityType: string
+      name: string
+      isArchived: boolean
+      list: { id: string; name: string } | null
+      tasks: ApiTask[]
+    }>(`/api/host-entities/${id}`),
+  patchHostEntity: (id: string, body: { name?: string; isArchived?: boolean; externalKey?: string | null }) =>
+    request<{ id: string; name: string; externalKey: string | null; isArchived: boolean }>(
+      `/api/host-entities/${id}`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify(body),
+      },
+    ),
 }

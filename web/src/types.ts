@@ -18,6 +18,8 @@ export const NotificationCodes = [
   'TASK_COMMENT',
   'TASK_REMINDER',
   'TASK_STATUS_CHANGED',
+  'TASK_REVIEW_REQUESTED',
+  'TASK_STUCK',
 ] as const
 export type NotificationCode = (typeof NotificationCodes)[number]
 
@@ -104,15 +106,24 @@ export type Task = {
   priority: TaskPriority
   position: number
   ownerUserId: string
+  createdByUserId?: string | null
   assigneeIds: string[]
   watcherIds: string[]
   dueDate: string | null
   startDate: string | null
   completedAt: string | null
+  reviewRequired: boolean
+  submittedAt: string | null
   checklist: ChecklistItem[]
   domainLabel: string | null
   domainEntityId: string | null
   domainEntityType: string | null
+  hostEntityId: string | null
+  taskTypeId?: string | null
+  isStuck?: boolean
+  stuckAt?: string | null
+  stuckReason?: string | null
+  dueDateMoveCount?: number
 }
 
 export type Notification = {

@@ -11,7 +11,15 @@ export type TrackerRepository = {
   spaces: () => ReturnType<typeof api.spaces>
   myWork: () => ReturnType<typeof api.myWork>
   listTasks: (listId: string) => ReturnType<typeof api.listTasks>
-  createTask: (listId: string, title: string) => ReturnType<typeof api.createTask>
+  createTask: (
+    listId: string,
+    body: {
+      title: string
+      assigneeIds?: string[]
+      dueDate?: string | null
+      hostEntityId?: string | null
+    },
+  ) => ReturnType<typeof api.createTask>
   updateTask: (taskId: string, patch: TaskPatch) => ReturnType<typeof api.updateTask>
   moveTask: (taskId: string, patch: Parameters<typeof api.moveTask>[1]) => ReturnType<typeof api.moveTask>
   putViewPreference: (body: {
@@ -28,7 +36,7 @@ function createHttpRepository(): TrackerRepository {
     spaces: () => api.spaces(),
     myWork: () => api.myWork(),
     listTasks: (listId) => api.listTasks(listId),
-    createTask: (listId, title) => api.createTask(listId, title),
+    createTask: (listId, body) => api.createTask(listId, body),
     updateTask: (taskId, patch) => api.updateTask(taskId, patch),
     moveTask: (taskId, patch) => api.moveTask(taskId, patch),
     putViewPreference: (body) => api.putViewPreference(body),

@@ -66,6 +66,10 @@ export function dueLabel(task: Task, now = new Date()): string | null {
   return formatDay(task.dueDate)
 }
 
+export function formatMonthYear(anchor: Date): string {
+  return anchor.toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })
+}
+
 export function monthGrid(anchor: Date): Date[] {
   const first = new Date(anchor.getFullYear(), anchor.getMonth(), 1)
   const start = new Date(first)

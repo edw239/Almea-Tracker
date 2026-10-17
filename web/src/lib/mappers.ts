@@ -59,6 +59,7 @@ export type ApiTask = {
   listId: string
   parentTaskId: string | null
   ownerUserId: string | null
+  createdByUserId?: string | null
   title: string
   description: string | null
   status: TaskStatus
@@ -78,6 +79,14 @@ export type ApiTask = {
   domainEntityId?: string | null
   domainEntityType?: string | null
   domainLabel?: string | null
+  hostEntityId?: string | null
+  reviewRequired?: boolean
+  submittedAt?: string | null
+  taskTypeId?: string | null
+  isStuck?: boolean
+  stuckAt?: string | null
+  stuckReason?: string | null
+  dueDateMoveCount?: number
   list?: { id: string; name: string; spaceId: string }
   _count?: { children?: number }
 }
@@ -145,15 +154,24 @@ export function mapApiTask(row: ApiTask): Task {
     priority: row.priority,
     position: row.position,
     ownerUserId: row.ownerUserId ?? '',
+    createdByUserId: row.createdByUserId ?? null,
     assigneeIds: (row.assignees ?? []).map((item) => item.userId),
     watcherIds: (row.watchers ?? []).map((item) => item.userId),
     dueDate: toDateOnly(row.dueDate),
     startDate: toDateOnly(row.startDate),
     completedAt: row.completedAt,
+    reviewRequired: Boolean(row.reviewRequired),
+    submittedAt: row.submittedAt ?? null,
     checklist: mapChecklist(row.checklist),
     domainLabel: row.domainLabel ?? null,
     domainEntityId: row.domainEntityId ?? null,
     domainEntityType: row.domainEntityType ?? null,
+    hostEntityId: row.hostEntityId ?? null,
+    taskTypeId: row.taskTypeId ?? null,
+    isStuck: Boolean(row.isStuck),
+    stuckAt: row.stuckAt ?? null,
+    stuckReason: row.stuckReason ?? null,
+    dueDateMoveCount: row.dueDateMoveCount ?? 0,
   }
 }
 

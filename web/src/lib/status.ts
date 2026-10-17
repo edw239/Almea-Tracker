@@ -3,9 +3,12 @@ import type { DemoState, ListStatus, Task, TaskStatus } from '../types'
 export const DEFAULT_STATUSES: Omit<ListStatus, 'id' | 'spaceId' | 'listId'>[] = [
   { name: 'К выполнению', color: '#94a3b8', order: 0, category: 'OPEN', isDefault: true },
   { name: 'В работе', color: '#3b82f6', order: 1, category: 'IN_PROGRESS', isDefault: false },
-  { name: 'Готово', color: '#22c55e', order: 2, category: 'DONE', isDefault: false },
-  { name: 'Отменено', color: '#ef4444', order: 3, category: 'CANCELLED', isDefault: false },
+  { name: 'На проверке', color: '#d97706', order: 2, category: 'IN_PROGRESS', isDefault: false },
+  { name: 'Готово', color: '#22c55e', order: 3, category: 'DONE', isDefault: false },
+  { name: 'Отменено', color: '#ef4444', order: 4, category: 'CANCELLED', isDefault: false },
 ]
+
+export const LIST_STATUS_NAME_IN_REVIEW = 'На проверке'
 
 export function resolveStatusesForList(state: DemoState, listId: string): ListStatus[] {
   const list = state.lists.find((item) => item.id === listId)

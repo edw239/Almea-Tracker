@@ -1,7 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, type ReactNode } from 'react'
 import { useAuth } from './auth'
-import { api, ApiError, type TaskPatch } from './lib/api'
+import { api, ApiError, type MeSummary, type MyWorkScope, type TaskPatch } from './lib/api'
 import { SYSTEM_LIST_PERSONAL_INBOX } from './lib/constants'
+import { showBrowserNotification } from './lib/browser-notifications'
 import {
   flattenSpaces,
   mapActivity,
@@ -56,10 +57,12 @@ type Action =
   | { type: 'SET_FAVORITES'; favorites: Favorite[] }
   | { type: 'SET_NOTIFICATIONS'; notifications: Notification[] }
   | { type: 'PATCH_NOTIFICATION'; id: string; patch: Partial<Notification> }
+  | { type: 'SET_SUMMARY'; summary: MeSummary | null }
 
 type StoreState = DemoState & {
   ready: boolean
   error: string | null
+  summary: MeSummary | null
 }
 
 function mergeById<T extends { id: string }>(current: T[], incoming: T[]): T[] {
@@ -71,7 +74,7 @@ function mergeById<T extends { id: string }>(current: T[], incoming: T[]): T[] {
 function reducer(state: StoreState, action: Action): StoreState {
   switch (action.type) {
     case 'CLEAR':
-      return { ...emptyState, ready: false, error: null }
+      return { ...emptyState, ready: false, error: null, summary: null }
     case 'HYDRATE':
       return { ...state, ...action.payload, ready: true, error: null }
     case 'MERGE_TASKS':
@@ -107,6 +110,8 @@ function reducer(state: StoreState, action: Action): StoreState {
           item.id === action.id ? { ...item, ...action.patch } : item,
         ),
       }
+    case 'SET_SUMMARY':
+      return { ...state, summary: action.summary }
     default:
       return state
   }
@@ -118,9 +123,28 @@ type StoreValue = StoreState & {
   ensureList: (listId: string, filters?: string) => Promise<void>
   ensureTask: (taskId: string) => Promise<void>
   loadOverdue: () => Promise<void>
-  addTask: (listId: string, title: string) => Promise<Task>
+  loadMyWork: (scope?: MyWorkScope) => Promise<Task[]>
+  loadMyWorkBuckets: (scope?: MyWorkScope) => Promise<{
+    overdue: Task[]
+    today: Task[]
+    later: Task[]
+    none: Task[]
+    inProgress: number
+  }>
+  addTask: (
+    listId: string,
+    input: {
+      title: string
+      assigneeIds?: string[]
+      dueDate?: string | null
+      hostEntityId?: string | null
+    },
+  ) => Promise<Task>
   patchTask: (taskId: string, patch: TaskPatch) => Promise<void>
-  setStatus: (taskId: string, listStatusId: string) => Promise<void>
+  markStuck: (taskId: string, reason: string) => Promise<void>
+  clearStuck: (taskId: string) => Promise<void>
+  refreshListStatuses: (listId: string) => Promise<void>
+  setStatus: (taskId: string, listStatusId: string, opts?: { reviewRejectReason?: string }) => Promise<void>
   moveTask: (taskId: string, afterTaskId: string | null, listId?: string) => Promise<void>
   toggleAssignee: (taskId: string, userId: string) => Promise<void>
   toggleFavorite: (entityType: FavoriteEntityType, entityId: string) => Promise<void>
@@ -129,6 +153,7 @@ type StoreValue = StoreState & {
   toggleChecklist: (taskId: string, itemId: string) => Promise<void>
   bulkUpdate: (taskIds: string[], patch: Omit<TaskPatch, 'title' | 'description' | 'dueDate'>) => Promise<void>
   loadNotifications: () => Promise<void>
+  loadSummary: () => Promise<void>
   markNotificationRead: (id: string) => Promise<void>
   markAllNotificationsRead: () => Promise<void>
   snoozeNotification: (id: string) => Promise<void>
@@ -151,10 +176,19 @@ function hydrateDetail(dispatch: (action: Action) => void, row: ApiTask) {
 
 export function StoreProvider({ children }: { children: ReactNode }) {
   const auth = useAuth()
-  const [state, dispatch] = useReducer(reducer, { ...emptyState, ready: false, error: null })
+  const [state, dispatch] = useReducer(reducer, {
+    ...emptyState,
+    ready: false,
+    error: null,
+    summary: null,
+  })
   const stateRef = useRef(state)
   stateRef.current = state
+  const knownNotificationIdsRef = useRef<Set<string>>(new Set())
+  const notificationsInitializedRef = useRef(false)
   const userId = auth.user?.id
+
+  const mustChangePassword = Boolean(auth.user?.mustChangePassword)
 
   const fail = useCallback((error: unknown, fallback: string) => {
     const message = error instanceof ApiError ? error.message : fallback
@@ -164,6 +198,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!userId) {
       dispatch({ type: 'CLEAR' })
+      return
+    }
+    if (mustChangePassword) {
+      dispatch({ type: 'SET_READY', ready: true })
       return
     }
     let cancelled = false
@@ -220,7 +258,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true
     }
-  }, [fail, userId])
+  }, [fail, mustChangePassword, userId])
 
   const ensureList = useCallback(
     async (listId: string, filters?: string) => {
@@ -260,11 +298,56 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }
   }, [fail])
 
-  const addTask = useCallback(async (listId: string, title: string) => {
-    const created = mapApiTask(await api.createTask(listId, title))
-    dispatch({ type: 'UPSERT_TASK', task: created })
-    return created
-  }, [])
+  const loadMyWork = useCallback(
+    async (scope: MyWorkScope = 'default') => {
+      try {
+        const rows = await api.myWork(scope)
+        const tasks = rows.map(mapApiTask)
+        dispatch({ type: 'MERGE_TASKS', tasks })
+        return tasks
+      } catch (error) {
+        fail(error, 'Не удалось загрузить My Work')
+        return []
+      }
+    },
+    [fail],
+  )
+
+  const loadMyWorkBuckets = useCallback(
+    async (scope: MyWorkScope = 'default') => {
+      try {
+        const data = await api.meBuckets(scope)
+        const mapBucket = (rows: ApiTask[]) => rows.map(mapApiTask)
+        const overdue = mapBucket(data.overdue)
+        const today = mapBucket(data.today)
+        const later = mapBucket(data.later)
+        const none = mapBucket(data.none)
+        dispatch({ type: 'MERGE_TASKS', tasks: [...overdue, ...today, ...later, ...none] })
+        return { overdue, today, later, none, inProgress: data.inProgress }
+      } catch (error) {
+        fail(error, 'Не удалось загрузить корзины')
+        return { overdue: [], today: [], later: [], none: [], inProgress: 0 }
+      }
+    },
+    [fail],
+  )
+
+  const addTask = useCallback(
+    async (
+      listId: string,
+      input: {
+        title: string
+        assigneeIds?: string[]
+        dueDate?: string | null
+        hostEntityId?: string | null
+      },
+    ) => {
+      const created = mapApiTask(await api.createTask(listId, input))
+      dispatch({ type: 'UPSERT_TASK', task: created })
+      return created
+    },
+    [],
+  )
 
   const patchTask = useCallback(
     async (taskId: string, patch: TaskPatch) => {
@@ -281,8 +364,43 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [fail],
   )
 
+  const markStuck = useCallback(
+    async (taskId: string, reason: string) => {
+      try {
+        const updated = mapApiTask(await api.markStuck(taskId, reason))
+        dispatch({ type: 'UPSERT_TASK', task: updated })
+      } catch (error) {
+        fail(error, 'Не удалось отметить «застрял»')
+        throw error
+      }
+    },
+    [fail],
+  )
+
+  const clearStuck = useCallback(
+    async (taskId: string) => {
+      try {
+        const updated = mapApiTask(await api.clearStuck(taskId))
+        dispatch({ type: 'UPSERT_TASK', task: updated })
+      } catch (error) {
+        fail(error, 'Не удалось снять «застрял»')
+        throw error
+      }
+    },
+    [fail],
+  )
+
+  const refreshListStatuses = useCallback(async (listId: string) => {
+    try {
+      const statuses = await api.listStatuses(listId)
+      dispatch({ type: 'MERGE_STATUSES', statuses })
+    } catch (error) {
+      fail(error, 'Не удалось обновить колонки')
+    }
+  }, [fail])
+
   const setStatus = useCallback(
-    async (taskId: string, listStatusId: string) => {
+    async (taskId: string, listStatusId: string, opts?: { reviewRejectReason?: string }) => {
       const previous = stateRef.current.tasks.find((item) => item.id === taskId)
       const column = stateRef.current.listStatuses.find((item) => item.id === listStatusId)
       if (previous && column) {
@@ -293,15 +411,25 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             listStatusId: column.id,
             status: column.category,
             completedAt: column.category === 'DONE' ? (previous.completedAt ?? new Date().toISOString()) : null,
+            submittedAt:
+              column.name === 'На проверке'
+                ? previous.submittedAt ?? new Date().toISOString()
+                : null,
           },
         })
       }
       try {
-        const updated = mapApiTask(await api.moveTask(taskId, { listStatusId }))
+        const updated = mapApiTask(
+          await api.moveTask(taskId, {
+            listStatusId,
+            ...(opts?.reviewRejectReason ? { reviewRejectReason: opts.reviewRejectReason } : {}),
+          }),
+        )
         dispatch({ type: 'UPSERT_TASK', task: updated })
       } catch (error) {
         if (previous) dispatch({ type: 'UPSERT_TASK', task: previous })
         fail(error, 'Не удалось сменить статус')
+        throw error
       }
     },
     [fail],
@@ -420,23 +548,40 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const loadNotifications = useCallback(async () => {
     try {
       const rows = await api.notifications()
-      dispatch({
-        type: 'SET_NOTIFICATIONS',
-        notifications: rows.map((item) => ({
-          id: item.id,
-          code: item.code as Notification['code'],
-          title: item.title,
-          body: item.body,
-          taskId: item.taskId,
-          createdAt: item.createdAt,
-          read: Boolean(item.readAt),
-          severity: item.severity,
-        })),
-      })
+      const mapped = rows.map((item) => ({
+        id: item.id,
+        code: item.code as Notification['code'],
+        title: item.title,
+        body: item.body,
+        taskId: item.taskId,
+        createdAt: item.createdAt,
+        read: Boolean(item.readAt),
+        severity: item.severity,
+      }))
+      if (notificationsInitializedRef.current) {
+        for (const item of rows) {
+          if (!item.readAt && !knownNotificationIdsRef.current.has(item.id)) {
+            showBrowserNotification(item.title, item.body, item.taskId)
+          }
+        }
+      } else {
+        notificationsInitializedRef.current = true
+      }
+      knownNotificationIdsRef.current = new Set(rows.map((item) => item.id))
+      dispatch({ type: 'SET_NOTIFICATIONS', notifications: mapped })
     } catch (error) {
       fail(error, 'Не удалось загрузить inbox')
     }
   }, [fail])
+
+  const loadSummary = useCallback(async () => {
+    try {
+      const summary = await api.meSummary()
+      dispatch({ type: 'SET_SUMMARY', summary })
+    } catch {
+      /* sidebar falls back to local counts */
+    }
+  }, [])
 
   const markNotificationRead = useCallback(
     async (id: string) => {
@@ -505,8 +650,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       ensureList,
       ensureTask,
       loadOverdue,
+      loadMyWork,
+      loadMyWorkBuckets,
       addTask,
       patchTask,
+      markStuck,
+      clearStuck,
+      refreshListStatuses,
       setStatus,
       moveTask,
       toggleAssignee,
@@ -516,6 +666,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       toggleChecklist,
       bulkUpdate,
       loadNotifications,
+      loadSummary,
       markNotificationRead,
       markAllNotificationsRead,
       snoozeNotification,
@@ -531,10 +682,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       ensureTask,
       loadNotifications,
       loadOverdue,
+      loadMyWork,
+      loadMyWorkBuckets,
+      loadSummary,
       markAllNotificationsRead,
       markNotificationRead,
+      markStuck,
+      clearStuck,
       moveTask,
       patchTask,
+      refreshListStatuses,
       personalInboxListId,
       setStatus,
       snoozeNotification,

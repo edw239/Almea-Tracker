@@ -1,10 +1,10 @@
-import type { ComponentType, ReactNode, SVGProps } from 'react'
+import type { ReactNode, SVGProps } from 'react'
 
 type IconProps = SVGProps<SVGSVGElement> & { title?: string }
 
 /**
- * Almea Marks — modern bold geometry.
- * Thick solid shapes only. No ornate pictograms.
+ * Almea Marks — modern bold geometry for the five system nav items.
+ * Tree spaces/lists stay typography-first (no marks there).
  */
 function IconBase({ title, children, className, ...props }: IconProps & { children: ReactNode }) {
   return (
@@ -77,50 +77,33 @@ export function IconFavorites(props: IconProps) {
   )
 }
 
-/** Personal — circle */
-export function IconSpacePersonal(props: IconProps) {
-  return (
-    <IconBase {...props}>
-      <circle cx="12" cy="12" r="7.2" />
-    </IconBase>
-  )
-}
-
-/** Ops — rounded square */
-export function IconSpaceOps(props: IconProps) {
-  return (
-    <IconBase {...props}>
-      <rect x="4.2" y="4.2" width="15.6" height="15.6" rx="2.4" />
-    </IconBase>
-  )
-}
-
-/** Other space — soft pill */
-export function IconSpace(props: IconProps) {
-  return (
-    <IconBase {...props}>
-      <rect x="3.6" y="7.2" width="16.8" height="9.6" rx="4.8" />
-    </IconBase>
-  )
-}
-
-/** List — three bars */
-export function IconList(props: IconProps) {
-  return (
-    <IconBase {...props}>
-      <rect x="4.5" y="5.2" width="15" height="2.8" rx="1.4" />
-      <rect x="4.5" y="10.6" width="15" height="2.8" rx="1.4" />
-      <rect x="4.5" y="16" width="10" height="2.8" rx="1.4" />
-    </IconBase>
-  )
-}
-
 /** Logout — bar + arrow */
 export function IconLogout(props: IconProps) {
   return (
     <IconBase {...props}>
       <rect x="3.6" y="4.4" width="3.2" height="15.2" rx="1.6" />
       <path d="M10 10.2h5.2V7.6L20.4 12 15.2 16.4v-2.6H10z" />
+    </IconBase>
+  )
+}
+
+/** Brands — mark */
+export function IconBrand(props: IconProps) {
+  return (
+    <IconBase {...props}>
+      <rect x="4" y="4" width="16" height="16" rx="3" />
+      <rect x="8" y="8" width="8" height="8" rx="1.5" />
+    </IconBase>
+  )
+}
+
+/** People — two marks */
+export function IconPeople(props: IconProps) {
+  return (
+    <IconBase {...props}>
+      <rect x="3.5" y="4" width="7" height="7" rx="3.5" />
+      <rect x="13.5" y="4" width="7" height="7" rx="3.5" />
+      <rect x="3" y="13.2" width="18" height="6.8" rx="3.4" />
     </IconBase>
   )
 }
@@ -137,10 +120,4 @@ export function IconChevron(props: IconProps & { direction?: 'left' | 'right' })
       )}
     </IconBase>
   )
-}
-
-export function spaceMark(systemKey?: string): ComponentType<IconProps> {
-  if (systemKey === 'personal') return IconSpacePersonal
-  if (systemKey === 'ops') return IconSpaceOps
-  return IconSpace
 }

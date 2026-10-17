@@ -1,9 +1,11 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
+import { api } from '../lib/api'
 import { formatDateTime, PRIORITY_LABEL } from '../lib/format'
 import { resolveStatusesForList } from '../lib/status'
 import { useStore } from '../store'
 import type { Task } from '../types'
+import { Select } from './Select'
 import { MentionText } from './ui'
 
 export function TaskPanel({ task, onClose }: { task: Task; onClose?: () => void }) {
@@ -16,15 +18,57 @@ export function TaskPanel({ task, onClose }: { task: Task; onClose?: () => void 
   const subtasks = store.tasks.filter((item) => item.parentTaskId === task.id)
   const blocked = relations.some((item) => item.type === 'BLOCKS' && item.toTaskId === task.id)
   const favorite = store.favorites.some((item) => item.entityType === 'TASK' && item.entityId === task.id)
+  const isCreator = task.createdByUserId === store.currentUserId
+  const isAssignee = task.assigneeIds.includes(store.currentUserId)
+  const statusOptions =
+    task.reviewRequired && isAssignee && !isCreator
+      ? statuses.filter((item) => item.category !== 'DONE')
+      : statuses
+  const reviewColumn = statuses.find((item) => item.name === 'На проверке')
+  const inProgressColumn = statuses.find((item) => item.name === 'В работе')
+  const doneColumn = statuses.find((item) => item.category === 'DONE')
   const [title, setTitle] = useState(task.title)
   const [description, setDescription] = useState(task.description)
   const [comment, setComment] = useState('')
   const [checkText, setCheckText] = useState('')
+  const [rejectReason, setRejectReason] = useState('')
+  const [stuckReason, setStuckReason] = useState('')
+  const [stuckError, setStuckError] = useState<string | null>(null)
+  const [brands, setBrands] = useState<Array<{ id: string; name: string }>>([])
+  const [taskTypes, setTaskTypes] = useState<Array<{ id: string; name: string }>>([])
+  const [statusError, setStatusError] = useState<string | null>(null)
 
   useEffect(() => {
     setTitle(task.title)
     setDescription(task.description)
   }, [task.description, task.id, task.title])
+
+  useEffect(() => {
+    let cancelled = false
+    void api.hostEntities({ type: 'brand' }).then((rows) => {
+      if (!cancelled) setBrands(rows.map((row) => ({ id: row.id, name: row.name })))
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!list?.spaceId) return
+    let cancelled = false
+    void api.listTaskTypes(list.spaceId).then((rows) => {
+      if (!cancelled) setTaskTypes(rows.map((row) => ({ id: row.id, name: row.name })))
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [list?.spaceId])
+
+  const brandHref = task.hostEntityId
+    ? `/brands/${task.hostEntityId}`
+    : task.domainLabel && task.domainEntityType && task.domainEntityId
+      ? `/host/${task.domainEntityType}/${task.domainEntityId}`
+      : null
 
   return (
     <aside className="panel">
@@ -46,10 +90,15 @@ export function TaskPanel({ task, onClose }: { task: Task; onClose?: () => void 
             }}
           />
           {blocked ? <p className="blocked">Заблокирована входящей связью BLOCKS</p> : null}
-          {task.domainLabel && task.domainEntityType && task.domainEntityId ? (
+          {task.isStuck ? (
+            <p className="blocked">
+              Застряла{task.stuckReason ? `: ${task.stuckReason}` : ''}
+              {task.stuckAt ? ` · ${formatDateTime(task.stuckAt)}` : ''}
+            </p>
+          ) : null}
+          {brandHref && task.domainLabel ? (
             <p className="page-lead">
-              Host:{' '}
-              <Link to={`/host/${task.domainEntityType}/${task.domainEntityId}`}>{task.domainLabel}</Link>
+              Бренд: <Link to={brandHref}>{task.domainLabel}</Link>
             </p>
           ) : null}
         </div>
@@ -72,34 +121,191 @@ export function TaskPanel({ task, onClose }: { task: Task; onClose?: () => void 
       <div className="row-2">
         <div className="field">
           <label>Колонка</label>
-          <select
+          <Select
             value={task.listStatusId ?? ''}
-            onChange={(event) => {
-              if (event.target.value) void store.setStatus(task.id, event.target.value)
+            options={statusOptions.map((status) => ({ value: status.id, label: status.name }))}
+            onChange={(listStatusId) => {
+              if (!listStatusId) return
+              setStatusError(null)
+              void store.setStatus(task.id, listStatusId).catch((caught) => {
+                setStatusError(caught instanceof Error ? caught.message : 'Не удалось сменить статус')
+              })
             }}
-          >
-            {statuses.map((status) => (
-              <option key={status.id} value={status.id}>
-                {status.name}
-              </option>
-            ))}
-          </select>
+          />
         </div>
         <div className="field">
           <label>Приоритет</label>
-          <select
+          <Select
             value={task.priority}
-            onChange={(event) =>
-              void store.patchTask(task.id, { priority: event.target.value as Task['priority'] })
-            }
-          >
-            {(['URGENT', 'HIGH', 'MEDIUM', 'LOW'] as const).map((value) => (
-              <option key={value} value={value}>
-                {PRIORITY_LABEL[value]}
-              </option>
-            ))}
-          </select>
+            options={(['URGENT', 'HIGH', 'MEDIUM', 'LOW'] as const).map((priority) => ({
+              value: priority,
+              label: PRIORITY_LABEL[priority],
+            }))}
+            onChange={(priority) => void store.patchTask(task.id, { priority })}
+          />
         </div>
+        {taskTypes.length > 0 ? (
+          <div className="field">
+            <label>Тип</label>
+            <Select
+              value={task.taskTypeId ?? ''}
+              placeholder="—"
+              options={[
+                { value: '', label: '—' },
+                ...taskTypes.map((item) => ({ value: item.id, label: item.name })),
+              ]}
+              onChange={(taskTypeId) =>
+                void store.patchTask(task.id, { taskTypeId: taskTypeId ? taskTypeId : null })
+              }
+            />
+          </div>
+        ) : null}
+      </div>
+
+      <div className="field">
+        <label>
+          <input
+            type="checkbox"
+            checked={task.reviewRequired}
+            onChange={(event) => void store.patchTask(task.id, { reviewRequired: event.target.checked })}
+          />{' '}
+          Нужна приёмка
+        </label>
+        {task.submittedAt ? (
+          <p className="page-lead">Сдано на проверку {formatDateTime(task.submittedAt)}</p>
+        ) : null}
+        {statusError ? <p className="form-error">{statusError}</p> : null}
+        {stuckError ? <p className="form-error">{stuckError}</p> : null}
+      </div>
+
+      {(isAssignee || task.ownerUserId === store.currentUserId) && task.status !== 'DONE' && task.status !== 'CANCELLED' ? (
+        <div className="me-panel">
+          {task.isStuck ? (
+            <button
+              type="button"
+              className="ghost"
+              onClick={() => {
+                setStuckError(null)
+                void store.clearStuck(task.id).catch((caught) => {
+                  setStuckError(caught instanceof Error ? caught.message : 'Не удалось снять')
+                })
+              }}
+            >
+              Снять «застрял»
+            </button>
+          ) : isAssignee ? (
+            <>
+              <div className="field">
+                <label htmlFor={`stuck-${task.id}`}>Что блокирует</label>
+                <input
+                  id={`stuck-${task.id}`}
+                  value={stuckReason}
+                  onChange={(event) => setStuckReason(event.target.value)}
+                  placeholder="Кратко: жду ответ, нет доступа…"
+                  maxLength={500}
+                />
+              </div>
+              <button
+                type="button"
+                className="pill"
+                onClick={() => {
+                  const reason = stuckReason.trim()
+                  if (!reason) {
+                    setStuckError('Укажите причину')
+                    return
+                  }
+                  setStuckError(null)
+                  void store.markStuck(task.id, reason).then(() => setStuckReason('')).catch((caught) => {
+                    setStuckError(caught instanceof Error ? caught.message : 'Не удалось отметить')
+                  })
+                }}
+              >
+                Я застрял
+              </button>
+            </>
+          ) : null}
+        </div>
+      ) : null}
+
+      {task.reviewRequired && isAssignee && !task.submittedAt && reviewColumn ? (
+        <div className="top-actions">
+          <button
+            type="button"
+            className="pill"
+            onClick={() => {
+              setStatusError(null)
+              void store.setStatus(task.id, reviewColumn.id).catch((caught) => {
+                setStatusError(caught instanceof Error ? caught.message : 'Не удалось сдать')
+              })
+            }}
+          >
+            Сдать на проверку
+          </button>
+        </div>
+      ) : null}
+
+      {task.submittedAt && isCreator ? (
+        <div className="me-panel">
+          <div className="top-actions">
+            {doneColumn ? (
+              <button
+                type="button"
+                className="pill"
+                onClick={() => {
+                  setStatusError(null)
+                  void store.setStatus(task.id, doneColumn.id).catch((caught) => {
+                    setStatusError(caught instanceof Error ? caught.message : 'Не удалось принять')
+                  })
+                }}
+              >
+                Принять
+              </button>
+            ) : null}
+            {inProgressColumn ? (
+              <button
+                type="button"
+                className="ghost"
+                onClick={() => {
+                  setStatusError(null)
+                  void store
+                    .setStatus(task.id, inProgressColumn.id, {
+                      reviewRejectReason: rejectReason.trim() || undefined,
+                    })
+                    .catch((caught) => {
+                      setStatusError(caught instanceof Error ? caught.message : 'Не удалось вернуть')
+                    })
+                }}
+              >
+                Вернуть
+              </button>
+            ) : null}
+          </div>
+          <div className="field">
+            <label htmlFor={`reject-${task.id}`}>Причина возврата</label>
+            <input
+              id={`reject-${task.id}`}
+              value={rejectReason}
+              onChange={(event) => setRejectReason(event.target.value)}
+              placeholder="Что поправить"
+            />
+          </div>
+        </div>
+      ) : null}
+
+      <div className="field">
+        <label htmlFor={`brand-${task.id}`}>Бренд</label>
+        <Select
+          id={`brand-${task.id}`}
+          value={task.hostEntityId ?? ''}
+          placeholder="Без привязки"
+          options={[
+            { value: '', label: 'Без привязки' },
+            ...brands.map((brand) => ({ value: brand.id, label: brand.name })),
+          ]}
+          onChange={(hostEntityId) =>
+            void store.patchTask(task.id, { hostEntityId: hostEntityId ? hostEntityId : null })
+          }
+        />
       </div>
 
       <div className="field">

@@ -33,13 +33,26 @@ function spaceStatuses(spaceId: string, prefix: string): ListStatus[] {
   return [
     { id: `${prefix}-open`, spaceId, listId: null, name: 'К выполнению', color: '#94a3b8', order: 0, category: 'OPEN', isDefault: true },
     { id: `${prefix}-run`, spaceId, listId: null, name: 'В работе', color: '#3b82f6', order: 1, category: 'IN_PROGRESS', isDefault: false },
-    { id: `${prefix}-done`, spaceId, listId: null, name: 'Готово', color: '#22c55e', order: 2, category: 'DONE', isDefault: false },
-    { id: `${prefix}-can`, spaceId, listId: null, name: 'Отменено', color: '#ef4444', order: 3, category: 'CANCELLED', isDefault: false },
+    { id: `${prefix}-rev`, spaceId, listId: null, name: 'На проверке', color: '#d97706', order: 2, category: 'IN_PROGRESS', isDefault: false },
+    { id: `${prefix}-done`, spaceId, listId: null, name: 'Готово', color: '#22c55e', order: 3, category: 'DONE', isDefault: false },
+    { id: `${prefix}-can`, spaceId, listId: null, name: 'Отменено', color: '#ef4444', order: 4, category: 'CANCELLED', isDefault: false },
   ]
 }
 
 function task(
-  partial: Omit<Task, 'watcherIds' | 'startDate' | 'completedAt' | 'parentTaskId' | 'domainEntityId' | 'domainEntityType'> &
+  partial: Omit<
+    Task,
+    | 'watcherIds'
+    | 'startDate'
+    | 'completedAt'
+    | 'parentTaskId'
+    | 'domainEntityId'
+    | 'domainEntityType'
+    | 'hostEntityId'
+    | 'reviewRequired'
+    | 'submittedAt'
+    | 'createdByUserId'
+  > &
     Partial<Task>,
 ): Task {
   const status = partial.status
@@ -50,6 +63,10 @@ function task(
     completedAt: status === 'DONE' ? hoursAgo(48) : null,
     domainEntityId: null,
     domainEntityType: null,
+    hostEntityId: null,
+    reviewRequired: false,
+    submittedAt: null,
+    createdByUserId: partial.ownerUserId,
     ...partial,
   }
 }

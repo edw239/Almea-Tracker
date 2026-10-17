@@ -8,6 +8,8 @@ type AuthValue = {
   bootError: string | null
   login: (email: string, password: string) => Promise<void>
   logout: () => Promise<void>
+  refreshUser: () => Promise<void>
+  patchUser: (patch: Partial<Pick<AuthUser, 'name'>>) => void
 }
 
 const AuthContext = createContext<AuthValue | null>(null)
@@ -54,6 +56,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await api.logout()
         setUser(null)
       },
+      refreshUser: async () => {
+        const me = await api.me()
+        setUser(me)
+      },
+      patchUser: (patch) => {
+        setUser((current) => (current ? { ...current, ...patch } : current))
+      },
     }),
     [bootError, ready, user],
   )
@@ -76,6 +85,22 @@ export function RequireAuth({ children }: { children: ReactNode }) {
   }
   if (!auth.user) {
     return <Navigate to="/login" replace state={{ from: location }} />
+  }
+  return children
+}
+
+export function RequireFreshPassword({ children }: { children: ReactNode }) {
+  const auth = useAuth()
+  if (auth.user?.mustChangePassword) {
+    return <Navigate to="/change-password" replace />
+  }
+  return children
+}
+
+export function RequireAdmin({ children }: { children: ReactNode }) {
+  const auth = useAuth()
+  if (auth.user?.role !== 'GLOBAL_ADMIN') {
+    return <Navigate to="/" replace />
   }
   return children
 }

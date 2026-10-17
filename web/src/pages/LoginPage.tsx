@@ -10,6 +10,9 @@ export function LoginPage() {
   const [error, setError] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
 
+  if (auth.user?.mustChangePassword) {
+    return <Navigate to="/change-password" replace />
+  }
   if (auth.user) {
     return <Navigate to="/" replace />
   }

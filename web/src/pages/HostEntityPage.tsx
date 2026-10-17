@@ -1,9 +1,12 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, Navigate, useNavigate, useParams } from 'react-router-dom'
 import { TaskRow } from '../components/ui'
 import { api } from '../lib/api'
 import { mapApiTask } from '../lib/mappers'
 import type { Task } from '../types'
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
 export function HostEntityPage() {
   const { entityType = '', entityId = '' } = useParams()
@@ -12,8 +15,10 @@ export function HostEntityPage() {
   const [listId, setListId] = useState<string | null>(null)
   const [label, setLabel] = useState(entityId)
   const [error, setError] = useState<string | null>(null)
+  const redirectToBrand = entityType === 'brand' && UUID_RE.test(entityId)
 
   useEffect(() => {
+    if (redirectToBrand) return
     let cancelled = false
     void (async () => {
       try {
@@ -29,6 +34,9 @@ export function HostEntityPage() {
         if (cancelled) return
         setTasks(bundle.tasks.map(mapApiTask))
         if (bundle.list?.name) setLabel(bundle.list.name)
+        if (entityType === 'brand' && bundle.id && UUID_RE.test(bundle.id)) {
+          navigate(`/brands/${bundle.id}`, { replace: true })
+        }
       } catch (caught) {
         if (!cancelled) setError(caught instanceof Error ? caught.message : 'Host entity недоступен')
       }
@@ -36,7 +44,11 @@ export function HostEntityPage() {
     return () => {
       cancelled = true
     }
-  }, [entityId, entityType])
+  }, [entityId, entityType, navigate, redirectToBrand])
+
+  if (redirectToBrand) {
+    return <Navigate to={`/brands/${entityId}`} replace />
+  }
 
   return (
     <>
