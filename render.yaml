@@ -1,9 +1,17 @@
 # Almea Tracker on Render (My Workspace / Frankfurt)
-# UI:  https://almea-track.onrender.com
-# API: https://almea-api.onrender.com
+# production tracks main:
+#   UI:  https://almea-track.onrender.com
+#   API: https://almea-api.onrender.com
+# staging tracks develop and uses its own database:
+#   UI:  https://almea-track-staging.onrender.com
+#   API: https://almea-api-staging.onrender.com
 
 databases:
   - name: almea-tracker-db
+    plan: basic-256mb
+    region: frankfurt
+    postgresMajorVersion: "17"
+  - name: almea-tracker-db-staging
     plan: basic-256mb
     region: frankfurt
     postgresMajorVersion: "17"
@@ -51,3 +59,46 @@ services:
     envVars:
       - key: VITE_API_URL
         value: https://almea-api.onrender.com
+
+  - type: web
+    name: almea-api-staging
+    runtime: node
+    plan: starter
+    region: frankfurt
+    branch: develop
+    autoDeploy: true
+    healthCheckPath: /api/health
+    buildCommand: cd api && NPM_CONFIG_PRODUCTION=false npm ci && npx prisma generate && npm run build
+    startCommand: cd api && npx prisma migrate deploy && npm run prisma:seed && npm run start:prod
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: APP_URL
+        value: https://almea-api-staging.onrender.com
+      - key: WEB_ORIGIN
+        value: https://almea-track-staging.onrender.com
+      - key: JWT_EXPIRES_IN
+        value: 8h
+      - key: JWT_SECRET
+        generateValue: true
+      - key: SEED_ADMIN_EMAIL
+        value: admin@almea.ru
+      - key: SEED_ADMIN_NAME
+        value: Эдуард
+      - key: SEED_ADMIN_PASSWORD
+        value: passswordds
+      - key: DATABASE_URL
+        fromDatabase:
+          name: almea-tracker-db-staging
+          property: connectionString
+
+  - type: web
+    name: almea-track-staging
+    runtime: static
+    branch: develop
+    autoDeploy: true
+    buildCommand: npm --prefix web install && npm --prefix web run build
+    staticPublishPath: web/dist
+    envVars:
+      - key: VITE_API_URL
+        value: https://almea-api-staging.onrender.com

@@ -82,14 +82,32 @@ npm run dev
 
 Откроется `http://localhost:5173`, вход `#/login`. Маршруты через HashRouter (`#/lists/...`) — удобно для статического деплоя.
 
-### Render (prod)
+## Ветки
 
-| Сервис | URL |
-| ------ | --- |
-| UI (static) | https://almea-track.onrender.com |
-| API | https://almea-api.onrender.com (`/api`, OpenAPI `/api/docs`) |
+| Ветка | Назначение |
+| ----- | ---------- |
+| `main` | Продакшен. Только готовый срез, через pull request. |
+| `develop` | Интеграция следующей версии. Сюда сливаются задачи, отсюда выкладывается staging. |
+| `feat/…`, `fix/…`, `chore/…` | Одна задача. Ветка от `develop`, pull request обратно в `develop`. |
 
-Env API: `DATABASE_URL`, `JWT_SECRET` (≥32), `WEB_ORIGIN=https://almea-track.onrender.com`, `SEED_ADMIN_*`.  
-UI build: `VITE_API_URL=https://almea-api.onrender.com`. Cookie в production: `SameSite=None; Secure` (разные хосты onrender).
+Ветка по умолчанию — `develop`, чтобы новый pull request не попал в прод. Render-прод следит за `main`.
+
+Срочный фикс продакшена: ветка от `main`, pull request в `main`, затем merge `main` в `develop`.
+
+Проверки на pull request: модульные тесты API и тесты со сборкой веба (`.github/workflows/ci.yml`).
+
+## Окружения
+
+Локально — Docker Postgres, см. выше. Staging и production — отдельные сервисы и отдельные базы.
+
+| Окружение | Ветка | UI | API |
+| --------- | ----- | -- | --- |
+| production | `main` | https://almea-track.onrender.com | https://almea-api.onrender.com |
+| staging | `develop` | https://almea-track-staging.onrender.com | https://almea-api-staging.onrender.com |
+
+У staging своя база `almea-tracker-db-staging`. К продовой базе она не подключается.
+
+Env API: `DATABASE_URL`, `JWT_SECRET` (≥32), `WEB_ORIGIN` своего UI, `SEED_ADMIN_*`.  
+UI build: `VITE_API_URL` своего API. Cookie на Render: `SameSite=None; Secure` (разные хосты).
 
 Подробнее — [web/README.md](web/README.md).
