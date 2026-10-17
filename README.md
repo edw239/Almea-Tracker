@@ -10,8 +10,10 @@ ClickUp-Light **Work Management** для Almea: Spaces → Folders → Lists →
 | -------- | ---------- |
 | [docs/DESIGN_SYSTEM.md](docs/DESIGN_SYSTEM.md) | Визуальный контракт |
 | [docs/task-tracker-principles.md](docs/task-tracker-principles.md) | Модель, dual status, ACL, API, фазы (портабельный гайд) |
+| [docs/USER_FLOWS.md](docs/USER_FLOWS.md) | Продуктовый слой: персоны, JTBD, user flows, метрики, пробелы |
 | [docs/DEVELOPMENT_PLAN.md](docs/DEVELOPMENT_PLAN.md) | Статус Almea Tracker по фазам |
 | [docs/PERSONAL_CABINET_PLAN.md](docs/PERSONAL_CABINET_PLAN.md) | Личный кабинет: фазы ЛК-0…4 |
+| [docs/ASSIGNMENT_LOOP_PLAN.md](docs/ASSIGNMENT_LOOP_PLAN.md) | Контур поручения (ЛС): фазы П-Люди…П-Ритм |
 | [api/README.md](api/README.md) | Backend: env, auth cookie, endpoints |
 | [web/README.md](web/README.md) | Frontend: env, proxy, data layer |
 
@@ -24,12 +26,29 @@ ClickUp-Light **Work Management** для Almea: Spaces → Folders → Lists →
 | API contract | OpenAPI (`/api/docs`) |
 | Auth | JWT в httpOnly cookie `almea_access` (не Bearer в JSON) |
 
-## Статус (2026-08-18)
+## Статус (2026-08-28)
 
 | Слой | Готово | Ещё нет |
 | ---- | ------ | ------- |
-| Backend | Phase A–B3 + inbox/host/filters + named views CRUD + templates + **ЛК-0 `/me`** | ЛК-1…4, Automations, email/push, CF/types |
-| Frontend | Логин, sidebar, My Work, **`#/me`**, lists/board + filters + saved views, templates, карточка, Inbox, Host | ЛК-1… UI, Automations UI, shared Almea auth |
+| Backend | Phase A–B3 + **ЛК** + **ЛС** + **Polish/Later** (buckets, stuck, types, statuses CRUD) | Phase C Automations, email, CF, CSV import |
+| Frontend | ЛК, My Work buckets, overview+rescheduled, stuck, статусы, calendar nav, types, browser push, `externalKey` | CSV import, CF, automations UI, email |
+
+**Очередь:** CSV import → Phase C — см. [DEVELOPMENT_PLAN.md](docs/DEVELOPMENT_PLAN.md).
+
+## Локальная БД (PostgreSQL)
+
+Нужен **Docker Desktop** (демон запущен). Из **корня репо**:
+
+```bash
+docker compose up -d postgres    # поднять Postgres на localhost:5433
+docker compose ps              # STATUS healthy
+cd api
+cp .env.example .env             # DATABASE_URL=...@127.0.0.1:5433/...
+npx prisma migrate deploy      # или migrate dev при разработке
+npm run prisma:seed              # при первом запуске
+```
+
+Остановить: `docker compose stop postgres`. Данные сохраняются в volume `almea_tracker_pg`.
 
 ## API
 

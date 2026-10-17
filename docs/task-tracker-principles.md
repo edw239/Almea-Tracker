@@ -365,7 +365,19 @@ Assignee без manage может:
 
 ### 5.6. My Work where
 
-Агрегатор «мои задачи»: не удалённые **и** (assignee **или** owner **или** watcher **или** видимая доменная сущность).
+**Дефолтный агрегатор** (`GET /tasks` без `scope` или `scope=default`): не удалённые top-level **и** (assignee **или** owner **или** watcher).
+
+**Расширенные скоупы** (`GET /tasks?scope=`), субъект только из JWT:
+
+| scope | Where |
+| ----- | ----- |
+| `assigned` | assignee |
+| `owned` | owner |
+| `watching` | watcher (только наблюдаемые, без owner/assignee) |
+| `mentions` | есть `TASK_MENTION` notification для пользователя |
+| `checklist` | пункт чеклиста с `assignee_user_id` = пользователь |
+
+`scope=watching` остаётся для фильтра «только слежу»; в дефолтный My Work watcher входит (решение 27.08.2026).
 
 Доп. фильтр внутри system spaces при листинге List:
 
@@ -987,7 +999,7 @@ Host plugin (system entity lists, playbooks, domain ACL) подключайте 
 - [ ] Utils: position, cursor, filter (+ тесты)
 - [ ] Dual status service с seed/inheritance
 - [ ] Move + bulk
-- [ ] Notifications types + scheduler hooks
+- [x] Notifications types + scheduler hooks (`WorkSchedulerService`, П-Ритм)
 - [ ] Automation runtime хотя бы для `STATUS_CHANGED`
 - [ ] Host plugin package: `ensureEntityList`, optional playbook
 
