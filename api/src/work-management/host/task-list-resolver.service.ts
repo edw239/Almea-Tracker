@@ -18,12 +18,19 @@ export class TaskListResolverService {
     systemKey: string;
     name: string;
     domainEntityId: string;
+    hostEntityId?: string | null;
     folderId?: string | null;
   }) {
     const existing = await this.prisma.taskList.findUnique({
       where: { spaceId_systemKey: { spaceId: params.spaceId, systemKey: params.systemKey } },
     });
     if (existing) {
+      if (params.hostEntityId && !existing.hostEntityId) {
+        return this.prisma.taskList.update({
+          where: { id: existing.id },
+          data: { hostEntityId: params.hostEntityId },
+        });
+      }
       return existing;
     }
     const last = await this.prisma.taskList.findFirst({
@@ -37,6 +44,7 @@ export class TaskListResolverService {
         name: params.name,
         systemKey: params.systemKey,
         domainEntityId: params.domainEntityId,
+        hostEntityId: params.hostEntityId ?? null,
         position: (last?.position ?? 0) + POSITION_STEP,
       },
     });

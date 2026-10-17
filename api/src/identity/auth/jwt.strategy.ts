@@ -11,6 +11,8 @@ import { AUTH_COOKIE_NAME } from './auth.constants';
 export type JwtPayload = {
   sub: string;
   email: string;
+  iat?: number;
+  exp?: number;
 };
 
 export type AuthUser = {
@@ -18,6 +20,7 @@ export type AuthUser = {
   email: string;
   name: string;
   role: 'GLOBAL_ADMIN' | 'MEMBER';
+  mustChangePassword: boolean;
 };
 
 function cookieExtractor(req: Request): string | null {
@@ -41,11 +44,33 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   async validate(payload: JwtPayload): Promise<AuthUser> {
     const user = await this.prisma.user.findUnique({
       where: { id: payload.sub },
-      select: { id: true, email: true, name: true, role: true },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        passwordChangedAt: true,
+        isActive: true,
+        mustChangePassword: true,
+      },
     });
-    if (!user) {
+    if (!user || !user.isActive) {
       throw AppError.unauthorized();
     }
-    return user;
+    if (user.passwordChangedAt && payload.iat != null) {
+      // Tokens with iat before the password-change second are dead.
+      // Same-second tokens (incl. the freshly issued cookie) stay valid.
+      const changedAtSec = Math.floor(user.passwordChangedAt.getTime() / 1000);
+      if (payload.iat < changedAtSec) {
+        throw AppError.unauthorized();
+      }
+    }
+    return {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      role: user.role,
+      mustChangePassword: user.mustChangePassword,
+    };
   }
 }

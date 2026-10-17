@@ -1,9 +1,10 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiCookieAuth, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../identity/auth/current-user.decorator';
 import { JwtAuthGuard } from '../identity/auth/jwt-auth.guard';
 import type { AuthUser } from '../identity/auth/jwt.strategy';
 import { BulkUpdateTasksDto, CreateTaskDto, MoveTaskDto, UpdateTaskDto } from './dto/task.dto';
+import { MarkStuckDto } from './dto/stuck.dto';
 import { TasksService } from './services/tasks.service';
 
 @ApiTags('tasks')
@@ -14,8 +15,8 @@ export class TasksController {
   constructor(private readonly tasks: TasksService) {}
 
   @Get('tasks')
-  myWork(@CurrentUser() user: AuthUser) {
-    return this.tasks.myWork(user);
+  myWork(@CurrentUser() user: AuthUser, @Query('scope') scope?: string) {
+    return this.tasks.myWork(user, scope);
   }
 
   @Get('tasks/overdue')
@@ -54,6 +55,20 @@ export class TasksController {
     @Body() dto: MoveTaskDto,
   ) {
     return this.tasks.move(user, taskId, dto);
+  }
+
+  @Post('tasks/:taskId/stuck')
+  markStuck(
+    @CurrentUser() user: AuthUser,
+    @Param('taskId', ParseUUIDPipe) taskId: string,
+    @Body() dto: MarkStuckDto,
+  ) {
+    return this.tasks.markStuck(user, taskId, dto.reason);
+  }
+
+  @Delete('tasks/:taskId/stuck')
+  clearStuck(@CurrentUser() user: AuthUser, @Param('taskId', ParseUUIDPipe) taskId: string) {
+    return this.tasks.clearStuck(user, taskId);
   }
 
   @Get('task-lists/:listId/tasks')

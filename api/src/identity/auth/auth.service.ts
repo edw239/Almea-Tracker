@@ -25,10 +25,16 @@ export class AuthService {
       throw AppError.unauthorized('Неверный email или пароль');
     }
     const ok = await bcrypt.compare(password, user.passwordHash);
-    if (!ok) {
+    if (!ok || !user.isActive) {
       throw AppError.unauthorized('Неверный email или пароль');
     }
-    return { id: user.id, email: user.email, name: user.name, role: user.role };
+    return {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      role: user.role,
+      mustChangePassword: user.mustChangePassword,
+    };
   }
 
   async signSession(user: AuthUser): Promise<string> {

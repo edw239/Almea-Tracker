@@ -1,5 +1,5 @@
 import { TaskPriority, TaskStatus } from '@prisma/client';
-import { IsArray, IsDateString, IsEnum, IsNumber, IsOptional, IsString, IsUUID, MaxLength, MinLength, ValidateIf } from 'class-validator';
+import { IsArray, IsBoolean, IsDateString, IsEnum, IsNumber, IsOptional, IsString, IsUUID, MaxLength, MinLength, ValidateIf } from 'class-validator';
 import { TITLE_MAX_LENGTH } from '../../common/constants';
 
 export class CreateTaskDto {
@@ -22,8 +22,22 @@ export class CreateTaskDto {
   dueDate?: string;
 
   @IsOptional()
+  @IsArray()
+  @IsUUID('4', { each: true })
+  assigneeIds?: string[];
+
+  @IsOptional()
+  @IsBoolean()
+  reviewRequired?: boolean;
+
+  @IsOptional()
   @IsUUID()
   parentTaskId?: string;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsUUID()
+  hostEntityId?: string | null;
 }
 
 export class UpdateTaskDto {
@@ -60,6 +74,15 @@ export class UpdateTaskDto {
   assigneeIds?: string[];
 
   @IsOptional()
+  @IsBoolean()
+  reviewRequired?: boolean;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  reviewRejectReason?: string;
+
+  @IsOptional()
   @ValidateIf((_, value) => value !== null)
   @IsString()
   @MaxLength(120)
@@ -76,6 +99,16 @@ export class UpdateTaskDto {
   @IsString()
   @MaxLength(200)
   domainLabel?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsUUID()
+  hostEntityId?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsUUID()
+  taskTypeId?: string | null;
 }
 
 export class MoveTaskDto {
@@ -99,6 +132,11 @@ export class MoveTaskDto {
   @IsOptional()
   @IsNumber()
   position?: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  reviewRejectReason?: string;
 }
 
 export class BulkUpdateTasksDto {

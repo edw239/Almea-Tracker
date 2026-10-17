@@ -1,15 +1,28 @@
 import { Injectable } from '@nestjs/common';
 import { NotificationCode, Prisma, TaskPriority, TaskStatus } from '@prisma/client';
-import { ASSIGNEE_ONLY_FIELDS } from '../../common/constants';
-import { AppError } from '../../common/errors';
+import { ASSIGNEE_ONLY_FIELDS, STUCK_REASON_MAX_LENGTH } from '../../common/constants';
+import { AppError, ErrorCode } from '../../common/errors';
+import { HttpStatus } from '@nestjs/common';
 import type { AuthUser } from '../../identity/auth/jwt.strategy';
 import { PrismaService } from '../../prisma/prisma.service';
 import { TaskAccessService } from '../access/task-access.service';
 import { TaskSpaceAccessService } from '../access/task-space-access.service';
 import { afterCursorWhere, clampPageSize, decodeCursor, encodeCursor } from '../utils/task-cursor.util';
 import { filtersToPrisma, parseFilters } from '../utils/task-filter.util';
+import {
+  buildMyWorkWhere,
+  isKnownMyWorkScope,
+  parseMyWorkScope,
+  type MyWorkScope,
+} from '../utils/my-work-scope.util';
 import { nextPosition, positionAfter, renumberPositions } from '../utils/task-position.util';
+import {
+  assertDelegationHasDue,
+  resolveCreateAssigneeIds,
+} from '../utils/task-delegation.util';
+import { isInReviewColumn, resolveReviewRequired } from '../utils/task-review.util';
 import { TaskCollabService } from './task-collab.service';
+import { HostEntitiesService } from './host-entities.service';
 import { TaskListStatusesService } from './task-list-statuses.service';
 import { TaskNotificationsService } from './task-notifications.service';
 
@@ -18,7 +31,10 @@ type CreateInput = {
   description?: string;
   priority?: TaskPriority;
   dueDate?: string;
+  assigneeIds?: string[];
+  reviewRequired?: boolean;
   parentTaskId?: string;
+  hostEntityId?: string | null;
 };
 
 type UpdateInput = {
@@ -29,9 +45,13 @@ type UpdateInput = {
   priority?: TaskPriority;
   dueDate?: string | null;
   assigneeIds?: string[];
+  reviewRequired?: boolean;
+  reviewRejectReason?: string;
   domainEntityId?: string | null;
   domainEntityType?: string | null;
   domainLabel?: string | null;
+  hostEntityId?: string | null;
+  taskTypeId?: string | null;
 };
 
 type MoveInput = {
@@ -40,6 +60,7 @@ type MoveInput = {
   listStatusId?: string;
   afterTaskId?: string | null;
   position?: number;
+  reviewRejectReason?: string;
 };
 
 type BulkInput = {
@@ -59,6 +80,7 @@ export class TasksService {
     private readonly statuses: TaskListStatusesService,
     private readonly collab: TaskCollabService,
     private readonly notifications: TaskNotificationsService,
+    private readonly hostEntities: HostEntitiesService,
   ) {}
 
   async statusesForList(user: AuthUser, listId: string) {
@@ -119,13 +141,15 @@ export class TasksService {
     };
   }
 
-  async myWork(user: AuthUser) {
+  async myWork(user: AuthUser, scopeRaw?: string) {
+    if (!isKnownMyWorkScope(scopeRaw)) {
+      throw AppError.badRequest(
+        'scope: default|assigned|owned|watching|mentions|checklist|created|waiting|untriaged|review',
+      );
+    }
+    const scope: MyWorkScope = parseMyWorkScope(scopeRaw);
     return this.prisma.task.findMany({
-      where: {
-        deletedAt: null,
-        parentTaskId: null,
-        OR: [{ ownerUserId: user.id }, { assignees: { some: { userId: user.id } } }],
-      },
+      where: buildMyWorkWhere(user.id, scope),
       orderBy: [{ dueDate: 'asc' }, { position: 'asc' }],
       include: { assignees: true, list: { select: { id: true, name: true, spaceId: true } } },
     });
@@ -216,11 +240,16 @@ export class TasksService {
       where: { listId, deletedAt: null, parentTaskId: null },
       orderBy: { position: 'desc' },
     });
+    const hostLink = await this.resolveHostEntityLink(input.hostEntityId);
+    const assigneeIds = resolveCreateAssigneeIds(user.id, input.assigneeIds);
+    assertDelegationHasDue(user.id, assigneeIds, input.dueDate);
+    const reviewRequired = resolveReviewRequired(user.id, assigneeIds, input.reviewRequired);
     return this.prisma.task.create({
       data: {
         listId,
         parentTaskId: input.parentTaskId ?? null,
         ownerUserId: user.id,
+        createdByUserId: user.id,
         title: input.title.trim(),
         description: input.description?.trim(),
         status: TaskStatus.OPEN,
@@ -228,7 +257,19 @@ export class TasksService {
         priority: input.priority ?? TaskPriority.MEDIUM,
         dueDate: input.dueDate ? new Date(input.dueDate) : null,
         position: nextPosition(last?.position),
-        assignees: { create: { userId: user.id } },
+        reviewRequired,
+        assignees:
+          assigneeIds.length > 0
+            ? { create: assigneeIds.map((userId) => ({ userId })) }
+            : undefined,
+        ...(hostLink
+          ? {
+              hostEntityId: hostLink.id,
+              domainEntityType: hostLink.entityType,
+              domainEntityId: hostLink.id,
+              domainLabel: hostLink.name,
+            }
+          : {}),
       },
       include: { assignees: true },
     });
@@ -255,8 +296,37 @@ export class TasksService {
     const previousDue = task.dueDate;
     const previousAssigneeIds = task.assignees.map((item) => item.userId);
     const previousStatus = task.status;
+    const nextAssigneeIds = input.assigneeIds ?? previousAssigneeIds;
+    const nextDue =
+      input.dueDate === undefined
+        ? previousDue
+          ? previousDue.toISOString()
+          : null
+        : input.dueDate;
+    assertDelegationHasDue(user.id, nextAssigneeIds, nextDue);
     const columns = await this.statuses.resolveForList(task.listId);
     const synced = this.syncDualStatus(task, columns, input);
+    const reviewPatch = this.resolveReviewTransition({
+      task,
+      columns,
+      synced,
+      accessLevel: level,
+      actorUserId: user.id,
+      rejectReason: input.reviewRejectReason,
+    });
+    let nextReviewRequired = task.reviewRequired;
+    if (input.reviewRequired !== undefined) {
+      nextReviewRequired = input.reviewRequired;
+    } else if (input.assigneeIds) {
+      const anchor = task.createdByUserId ?? user.id;
+      nextReviewRequired = resolveReviewRequired(anchor, nextAssigneeIds);
+    }
+    const hostLink =
+      input.hostEntityId === undefined
+        ? undefined
+        : input.hostEntityId === null
+          ? null
+          : await this.resolveHostEntityLink(input.hostEntityId);
     const updated = await this.prisma.$transaction(async (tx) => {
       if (input.assigneeIds) {
         await tx.taskAssignee.deleteMany({ where: { taskId } });
@@ -267,6 +337,39 @@ export class TasksService {
           });
         }
       }
+      if (reviewPatch.rejectActivity) {
+        await tx.taskActivity.create({
+          data: {
+            taskId,
+            userId: user.id,
+            action: 'REVIEW_REJECTED',
+            details: { reason: reviewPatch.rejectActivity.reason },
+          },
+        });
+      }
+      const nextDueDate =
+        input.dueDate === undefined ? undefined : input.dueDate ? new Date(input.dueDate) : null;
+      let dueMoveIncrement = 0;
+      if (input.dueDate !== undefined) {
+        const prevMs = previousDue?.getTime() ?? null;
+        const nextMs = nextDueDate?.getTime() ?? null;
+        if (prevMs !== nextMs) {
+          await tx.taskActivity.create({
+            data: {
+              taskId,
+              userId: user.id,
+              action: 'DUE_DATE_CHANGED',
+              details: {
+                from: previousDue?.toISOString() ?? null,
+                to: nextDueDate?.toISOString() ?? null,
+              },
+            },
+          });
+          if (previousDue != null) {
+            dueMoveIncrement = 1;
+          }
+        }
+      }
       return tx.task.update({
         where: { id: taskId },
         data: {
@@ -275,11 +378,39 @@ export class TasksService {
           status: synced.status,
           listStatusId: synced.listStatusId,
           priority: input.priority,
-          dueDate: input.dueDate === undefined ? undefined : input.dueDate ? new Date(input.dueDate) : null,
+          dueDate: nextDueDate,
+          ...(dueMoveIncrement
+            ? { dueDateMoveCount: { increment: dueMoveIncrement } }
+            : {}),
           completedAt: synced.completedAt,
-          domainEntityId: input.domainEntityId === undefined ? undefined : input.domainEntityId,
-          domainEntityType: input.domainEntityType === undefined ? undefined : input.domainEntityType,
-          domainLabel: input.domainLabel === undefined ? undefined : input.domainLabel,
+          reviewRequired: nextReviewRequired,
+          submittedAt: reviewPatch.submittedAt,
+          taskTypeId: input.taskTypeId === undefined ? undefined : input.taskTypeId,
+          domainEntityId:
+            hostLink === undefined
+              ? input.domainEntityId === undefined
+                ? undefined
+                : input.domainEntityId
+              : hostLink
+                ? hostLink.id
+                : null,
+          domainEntityType:
+            hostLink === undefined
+              ? input.domainEntityType === undefined
+                ? undefined
+                : input.domainEntityType
+              : hostLink
+                ? hostLink.entityType
+                : null,
+          domainLabel:
+            hostLink === undefined
+              ? input.domainLabel === undefined
+                ? undefined
+                : input.domainLabel
+              : hostLink
+                ? hostLink.name
+                : null,
+          hostEntityId: hostLink === undefined ? undefined : hostLink ? hostLink.id : null,
         },
         include: { assignees: true, checklist: true },
       });
@@ -297,6 +428,9 @@ export class TasksService {
         body: updated.title,
         taskId,
       });
+    }
+    if (reviewPatch.notifyReview) {
+      await this.notifyReviewRequested(user.id, updated);
     }
     if (synced.status !== previousStatus) {
       const recipients = [
@@ -356,19 +490,38 @@ export class TasksService {
       await this.spaceAccess.assertCanCreateTaskInList(user, targetList);
     }
 
-    return this.prisma.$transaction(async (tx) => {
-      const columns = await this.statuses.resolveForList(targetListId);
-      const synced = this.syncDualStatus(
-        { status: task.status, listStatusId: task.listStatusId, completedAt: task.completedAt },
-        columns,
-        { status: input.status, listStatusId: input.listStatusId },
-      );
+    const columns = await this.statuses.resolveForList(targetListId);
+    const synced = this.syncDualStatus(
+      { status: task.status, listStatusId: task.listStatusId, completedAt: task.completedAt },
+      columns,
+      { status: input.status, listStatusId: input.listStatusId },
+    );
+    const reviewPatch = this.resolveReviewTransition({
+      task,
+      columns,
+      synced,
+      accessLevel: level,
+      actorUserId: user.id,
+      rejectReason: input.reviewRejectReason,
+    });
 
+    const updated = await this.prisma.$transaction(async (tx) => {
       let position = task.position;
       if (input.position != null && Number.isFinite(input.position)) {
         position = input.position;
       } else if (input.afterTaskId !== undefined || listChanged) {
         position = await this.resolvePositionInTx(tx, targetListId, taskId, input.afterTaskId ?? null);
+      }
+
+      if (reviewPatch.rejectActivity) {
+        await tx.taskActivity.create({
+          data: {
+            taskId,
+            userId: user.id,
+            action: 'REVIEW_REJECTED',
+            details: { reason: reviewPatch.rejectActivity.reason },
+          },
+        });
       }
 
       return tx.task.update({
@@ -378,11 +531,17 @@ export class TasksService {
           status: synced.status,
           listStatusId: synced.listStatusId,
           completedAt: synced.completedAt,
+          submittedAt: reviewPatch.submittedAt,
           position,
         },
         include: { assignees: true },
       });
     });
+
+    if (reviewPatch.notifyReview) {
+      await this.notifyReviewRequested(user.id, updated);
+    }
+    return updated;
   }
 
   async bulkUpdate(user: AuthUser, input: BulkInput) {
@@ -430,6 +589,93 @@ export class TasksService {
       results.push(updated);
     }
     return results;
+  }
+
+  private async resolveHostEntityLink(hostEntityId: string | null | undefined) {
+    if (hostEntityId == null || hostEntityId === undefined) {
+      return null;
+    }
+    const entity = await this.hostEntities.findActive(hostEntityId);
+    return { id: entity.id, entityType: entity.entityType, name: entity.name };
+  }
+
+  private resolveReviewTransition(opts: {
+    task: {
+      reviewRequired: boolean;
+      submittedAt: Date | null;
+      createdByUserId: string | null;
+      listStatusId: string | null;
+    };
+    columns: Array<{ id: string; name: string }>;
+    synced: { status: TaskStatus; listStatusId: string | null; completedAt: Date | null };
+    accessLevel: 'manage' | 'assignee' | 'view';
+    actorUserId: string;
+    rejectReason?: string;
+  }): {
+    submittedAt: Date | null;
+    notifyReview: boolean;
+    rejectActivity: { reason: string } | null;
+  } {
+    const { task, columns, synced, accessLevel, actorUserId, rejectReason } = opts;
+    const nextIsReview = isInReviewColumn(columns, synced.listStatusId);
+    const nextIsDone = synced.status === TaskStatus.DONE;
+    const wasReview = Boolean(task.submittedAt) || isInReviewColumn(columns, task.listStatusId);
+
+    if (accessLevel === 'assignee' && task.reviewRequired && nextIsDone) {
+      throw new AppError(
+        ErrorCode.TASK_REVIEW_BLOCKS_DONE,
+        'Сначала сдайте на проверку; закрыть может постановщик',
+        HttpStatus.FORBIDDEN,
+      );
+    }
+
+    let submittedAt: Date | null = task.submittedAt;
+    let notifyReview = false;
+    let rejectActivity: { reason: string } | null = null;
+
+    if (nextIsReview) {
+      if (!task.submittedAt) {
+        submittedAt = new Date();
+        notifyReview = true;
+      }
+    } else if (wasReview || task.submittedAt) {
+      submittedAt = null;
+      const isCreator = task.createdByUserId === actorUserId;
+      if (!nextIsDone && (accessLevel === 'manage' || isCreator)) {
+        rejectActivity = {
+          reason: rejectReason?.trim() || 'Возвращено с проверки',
+        };
+      }
+    }
+
+    if (nextIsDone) {
+      submittedAt = null;
+      rejectActivity = null;
+    }
+
+    return { submittedAt, notifyReview, rejectActivity };
+  }
+
+  private async notifyReviewRequested(
+    actorUserId: string,
+    task: {
+      id: string;
+      title: string;
+      createdByUserId: string | null;
+      submittedAt: Date | null;
+    },
+  ) {
+    if (!task.createdByUserId || !task.submittedAt) return;
+    const submittedKey = task.submittedAt.toISOString();
+    await this.notifications.notify({
+      userIds: [task.createdByUserId],
+      actorUserId,
+      code: NotificationCode.TASK_REVIEW_REQUESTED,
+      title: 'На проверке',
+      body: task.title,
+      taskId: task.id,
+      dedupKey: `review:${task.id}:${submittedKey}`,
+    });
   }
 
   private syncDualStatus(
@@ -488,5 +734,88 @@ export class TasksService {
       return nextPosition(renumbered.at(-1)?.position);
     }
     return again.position;
+  }
+
+  async markStuck(user: AuthUser, taskId: string, reasonRaw: string) {
+    const level = await this.taskAccess.resolveLevel(user, taskId);
+    if (level === 'view') {
+      throw AppError.forbidden();
+    }
+    const reason = reasonRaw.trim().slice(0, STUCK_REASON_MAX_LENGTH);
+    if (!reason) {
+      throw AppError.badRequest('Укажите причину блокировки');
+    }
+    const task = await this.prisma.task.findFirstOrThrow({
+      where: { id: taskId, deletedAt: null },
+      include: { assignees: true },
+    });
+    const now = new Date();
+    const updated = await this.prisma.$transaction(async (tx) => {
+      await tx.taskActivity.create({
+        data: {
+          taskId,
+          userId: user.id,
+          action: 'TASK_STUCK',
+          details: { reason },
+        },
+      });
+      return tx.task.update({
+        where: { id: taskId },
+        data: {
+          isStuck: true,
+          stuckAt: now,
+          stuckReason: reason,
+          stuckByUserId: user.id,
+        },
+        include: { assignees: true },
+      });
+    });
+    const notifyIds = [
+      task.ownerUserId,
+      task.createdByUserId,
+      ...task.assignees.map((row) => row.userId),
+    ].filter((id): id is string => Boolean(id && id !== user.id));
+    await this.notifications.notify({
+      userIds: notifyIds,
+      actorUserId: user.id,
+      code: NotificationCode.TASK_STUCK,
+      title: 'Задача застряла',
+      body: `${updated.title}: ${reason}`,
+      taskId,
+      dedupKey: `stuck:${taskId}:${now.toISOString().slice(0, 10)}`,
+    });
+    return updated;
+  }
+
+  async clearStuck(user: AuthUser, taskId: string) {
+    const level = await this.taskAccess.resolveLevel(user, taskId);
+    if (level === 'view') {
+      throw AppError.forbidden();
+    }
+    const task = await this.prisma.task.findFirstOrThrow({
+      where: { id: taskId, deletedAt: null },
+    });
+    if (!task.isStuck) {
+      return task;
+    }
+    if (level === 'assignee') {
+      const canClear =
+        task.ownerUserId === user.id ||
+        task.createdByUserId === user.id ||
+        task.stuckByUserId === user.id;
+      if (!canClear) {
+        throw AppError.forbidden();
+      }
+    }
+    return this.prisma.task.update({
+      where: { id: taskId },
+      data: {
+        isStuck: false,
+        stuckAt: null,
+        stuckReason: null,
+        stuckByUserId: null,
+      },
+      include: { assignees: true },
+    });
   }
 }

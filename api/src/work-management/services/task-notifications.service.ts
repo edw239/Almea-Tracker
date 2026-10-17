@@ -1,9 +1,15 @@
 import { Injectable } from '@nestjs/common';
 import { NotificationCode, NotificationSeverity, TaskStatus } from '@prisma/client';
-import { DUE_SOON_HOURS, NOTIFICATION_SNOOZE_HOURS_DEFAULT } from '../../common/constants';
+import {
+  DUE_SOON_HOURS,
+  NOTIFICATION_SNOOZE_HOURS_DEFAULT,
+  SCHEDULE_DUE_USER_BATCH,
+} from '../../common/constants';
 import { AppError } from '../../common/errors';
 import type { AuthUser } from '../../identity/auth/jwt.strategy';
 import { PrismaService } from '../../prisma/prisma.service';
+import { isInQuietHours, quietHoursEndUtc } from '../utils/quiet-hours.util';
+import { buildMyWorkWhere } from '../utils/my-work-scope.util';
 
 const DEFAULT_SEVERITY: Record<NotificationCode, NotificationSeverity> = {
   TASK_ASSIGNED: NotificationSeverity.LOW,
@@ -13,6 +19,8 @@ const DEFAULT_SEVERITY: Record<NotificationCode, NotificationSeverity> = {
   TASK_COMMENT: NotificationSeverity.LOW,
   TASK_REMINDER: NotificationSeverity.MEDIUM,
   TASK_STATUS_CHANGED: NotificationSeverity.LOW,
+  TASK_REVIEW_REQUESTED: NotificationSeverity.MEDIUM,
+  TASK_STUCK: NotificationSeverity.HIGH,
 };
 
 export type NotifyInput = {
@@ -36,8 +44,39 @@ export class TaskNotificationsService {
       return 0;
     }
     const severity = input.severity ?? DEFAULT_SEVERITY[input.code];
+    const prefs = await this.prisma.user.findMany({
+      where: { id: { in: recipients } },
+      select: {
+        id: true,
+        timezone: true,
+        quietHoursFrom: true,
+        quietHoursTo: true,
+        notificationSettings: {
+          where: { code: input.code },
+          select: { inApp: true },
+        },
+      },
+    });
+    const byId = new Map(prefs.map((row) => [row.id, row]));
+    const now = new Date();
     let created = 0;
+
     for (const userId of recipients) {
+      const pref = byId.get(userId);
+      const inApp = pref?.notificationSettings[0]?.inApp ?? true;
+      if (!inApp) {
+        continue;
+      }
+
+      let snoozedUntil: Date | null = null;
+      if (
+        pref &&
+        isInQuietHours(now, pref.timezone, pref.quietHoursFrom, pref.quietHoursTo) &&
+        pref.quietHoursTo != null
+      ) {
+        snoozedUntil = quietHoursEndUtc(now, pref.timezone, pref.quietHoursTo);
+      }
+
       if (input.dedupKey) {
         const row = await this.prisma.taskNotification.upsert({
           where: { userId_dedupKey: { userId, dedupKey: input.dedupKey } },
@@ -49,6 +88,7 @@ export class TaskNotificationsService {
             body: input.body,
             taskId: input.taskId ?? null,
             dedupKey: input.dedupKey,
+            snoozedUntil,
           },
           update: {
             title: input.title,
@@ -56,7 +96,7 @@ export class TaskNotificationsService {
             severity,
             taskId: input.taskId ?? null,
             clearedAt: null,
-            snoozedUntil: null,
+            snoozedUntil,
             readAt: null,
           },
         });
@@ -70,6 +110,7 @@ export class TaskNotificationsService {
             title: input.title,
             body: input.body,
             taskId: input.taskId ?? null,
+            snoozedUntil,
           },
         });
         created += 1;
@@ -127,12 +168,20 @@ export class TaskNotificationsService {
     return { ok: true };
   }
 
-  async snooze(user: AuthUser, id: string, hours = NOTIFICATION_SNOOZE_HOURS_DEFAULT) {
-    if (!Number.isFinite(hours) || hours < 1 || hours > 168) {
+  async snooze(user: AuthUser, id: string, hours?: number) {
+    let resolved = hours;
+    if (resolved == null) {
+      const profile = await this.prisma.user.findUnique({
+        where: { id: user.id },
+        select: { snoozeHoursDefault: true },
+      });
+      resolved = profile?.snoozeHoursDefault ?? NOTIFICATION_SNOOZE_HOURS_DEFAULT;
+    }
+    if (!Number.isFinite(resolved) || resolved < 1 || resolved > 168) {
       throw AppError.badRequest('snooze hours: 1..168');
     }
     await this.requireOwn(user.id, id);
-    const until = new Date(Date.now() + hours * 3600_000);
+    const until = new Date(Date.now() + resolved * 3600_000);
     return this.prisma.taskNotification.update({
       where: { id },
       data: { snoozedUntil: until, readAt: new Date() },
@@ -160,11 +209,9 @@ export class TaskNotificationsService {
 
     const mine = await this.prisma.task.findMany({
       where: {
-        deletedAt: null,
-        parentTaskId: null,
+        ...buildMyWorkWhere(userId, 'default'),
         dueDate: { not: null },
         status: { notIn: [TaskStatus.DONE, TaskStatus.CANCELLED] },
-        OR: [{ ownerUserId: userId }, { assignees: { some: { userId } } }],
       },
       select: { id: true, title: true, dueDate: true },
       take: 200,
@@ -193,6 +240,23 @@ export class TaskNotificationsService {
         });
       }
     }
+  }
+
+  /**
+   * Global due/overdue fan-out for users who never opened inbox.
+   * Batch size keeps each tick bounded; small teams finish in one pass.
+   */
+  async scanDueBucketsAllUsers(limit = SCHEDULE_DUE_USER_BATCH): Promise<number> {
+    const users = await this.prisma.user.findMany({
+      where: { isActive: true },
+      select: { id: true },
+      orderBy: { id: 'asc' },
+      take: limit,
+    });
+    for (const user of users) {
+      await this.scanDueBuckets(user.id);
+    }
+    return users.length;
   }
 
   private async requireOwn(userId: string, id: string) {

@@ -11,6 +11,10 @@ const envSchema = z.object({
     .string()
     .regex(/^\d+[smhd]$/, 'Use a compact duration like 8h, 30m, 7d')
     .default('8h'),
+  SCHEDULER_ENABLED: z
+    .enum(['true', 'false'])
+    .default('true')
+    .transform((value) => value === 'true'),
   SEED_ADMIN_EMAIL: z.string().email().default('admin@almea.ru'),
   SEED_ADMIN_PASSWORD: z.string().min(8),
   SEED_ADMIN_NAME: z.string().min(1).default('Эдуард'),

@@ -7,6 +7,8 @@ import { parseDurationToSeconds } from './auth/auth.constants';
 import { AuthController } from './auth/auth.controller';
 import { AuthService } from './auth/auth.service';
 import { JwtStrategy } from './auth/jwt.strategy';
+import { MeController } from './me.controller';
+import { MeService } from './me.service';
 import { UsersController } from './users.controller';
 import { UsersService } from './users.service';
 
@@ -23,8 +25,8 @@ import { UsersService } from './users.service';
       }),
     }),
   ],
-  controllers: [AuthController, UsersController],
-  providers: [AuthService, JwtStrategy, UsersService],
+  controllers: [AuthController, UsersController, MeController],
+  providers: [AuthService, JwtStrategy, UsersService, MeService],
   exports: [AuthService],
 })
 export class IdentityModule {}

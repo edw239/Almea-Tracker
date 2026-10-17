@@ -83,11 +83,39 @@ export class TaskTemplatesService {
     if (!template) throw AppError.notFound();
     this.assertTemplateApplies(template, list);
 
+    return this.expandTemplateIntoList({
+      listId,
+      templateId,
+      actorUserId: user.id,
+      assigneeUserId: user.id,
+    });
+  }
+
+  /**
+   * Internal expand for schedulers / trusted callers (no JWT ACL).
+   * Caller must ensure list/template exist and apply.
+   */
+  async expandTemplateIntoList(input: {
+    listId: string;
+    templateId: string;
+    actorUserId: string;
+    assigneeUserId: string;
+    dueDate?: Date | null;
+  }) {
+    const list = await this.prisma.taskList.findFirst({ where: { id: input.listId, isArchived: false } });
+    if (!list) throw AppError.notFound();
+
+    const template = await this.prisma.taskTemplate.findFirst({
+      where: { id: input.templateId, isActive: true },
+    });
+    if (!template) throw AppError.notFound();
+    this.assertTemplateApplies(template, list);
+
     const items = parseTemplateItems(template.items);
-    const columns = await this.statuses.resolveForList(listId);
+    const columns = await this.statuses.resolveForList(input.listId);
     const open = this.statuses.defaultForCategory(columns, TaskStatus.OPEN);
     const last = await this.prisma.task.findFirst({
-      where: { listId, deletedAt: null, parentTaskId: null },
+      where: { listId: input.listId, deletedAt: null, parentTaskId: null },
       orderBy: { position: 'desc' },
     });
     let position = last?.position ?? 0;
@@ -97,8 +125,10 @@ export class TaskTemplatesService {
       for (const item of items) {
         position = nextPosition(position);
         const task = await this.createTaskFromItem(tx, {
-          listId,
-          userId: user.id,
+          listId: input.listId,
+          actorUserId: input.actorUserId,
+          assigneeUserId: input.assigneeUserId,
+          dueDate: input.dueDate ?? null,
           item,
           listStatusId: open?.id ?? null,
           position,
@@ -108,8 +138,10 @@ export class TaskTemplatesService {
         for (const sub of item.subtasks ?? []) {
           position = nextPosition(position);
           await this.createTaskFromItem(tx, {
-            listId,
-            userId: user.id,
+            listId: input.listId,
+            actorUserId: input.actorUserId,
+            assigneeUserId: input.assigneeUserId,
+            dueDate: null,
             item: { title: sub.title, priority: sub.priority },
             listStatusId: open?.id ?? null,
             position,
@@ -137,7 +169,9 @@ export class TaskTemplatesService {
     tx: Prisma.TransactionClient,
     input: {
       listId: string;
-      userId: string;
+      actorUserId: string;
+      assigneeUserId: string;
+      dueDate: Date | null;
       item: Pick<TemplateItem, 'title' | 'description' | 'priority' | 'checklist'>;
       listStatusId: string | null;
       position: number;
@@ -149,14 +183,16 @@ export class TaskTemplatesService {
       data: {
         listId: input.listId,
         parentTaskId: input.parentTaskId,
-        ownerUserId: input.userId,
+        ownerUserId: input.assigneeUserId,
+        createdByUserId: input.actorUserId,
         title,
         description: input.item.description?.trim(),
         status: TaskStatus.OPEN,
         listStatusId: input.listStatusId,
         priority: input.item.priority ?? TaskPriority.MEDIUM,
+        dueDate: input.parentTaskId ? null : input.dueDate,
         position: input.position,
-        assignees: { create: { userId: input.userId } },
+        assignees: { create: { userId: input.assigneeUserId } },
         checklist: input.item.checklist?.length
           ? {
               create: input.item.checklist.map((row, index) => ({
