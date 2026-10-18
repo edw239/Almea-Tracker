@@ -1,5 +1,6 @@
 import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent, ReactElement } from 'react'
 import { useEffect, useId, useRef, useState } from 'react'
+import { api } from '../../lib/api'
 import { createPortal } from 'react-dom'
 import { useDroppable } from '@dnd-kit/core'
 import { Link, NavLink, useLocation } from 'react-router-dom'
@@ -232,6 +233,19 @@ export function Sidebar({
 }: SidebarProps): ReactElement {
   const { user, logout } = useAuth()
   const store = useStore()
+  const [favoriteBoards, setFavoriteBoards] = useState<Array<{ id: string; name: string }>>([])
+  useEffect(() => {
+    const ids = new Set(
+      store.favorites.filter((item) => item.entityType === 'BOARD').map((item) => item.entityId),
+    )
+    if (ids.size === 0) {
+      setFavoriteBoards([])
+      return
+    }
+    void api.boards().then((rows) => {
+      setFavoriteBoards(rows.filter((board) => ids.has(board.id)).map((board) => ({ id: board.id, name: board.name })))
+    }).catch(() => setFavoriteBoards([]))
+  }, [store.favorites])
   const { pathname } = useLocation()
   const [prefs, setPrefs] = useState<SidebarPrefs>(() => loadSidebarPrefs())
   const [loupe, setLoupe] = useState<LoupeState | null>(null)
@@ -487,6 +501,21 @@ export function Sidebar({
             </div>
           ))}
 
+          {favoriteBoards.length > 0 ? (
+            <div className="mb-4">
+              {!liveCollapsed && <p className="label-overline mb-1.5 px-3">Доски</p>}
+              {favoriteBoards.map((board) => (
+                <Link
+                  key={board.id}
+                  to={`/boards/${board.id}`}
+                  onClick={onNavigate}
+                  className="flex items-center gap-3 rounded-full px-3 py-2 text-sm hover:bg-inset"
+                >
+                  {!liveCollapsed ? board.name : board.name.slice(0, 1)}
+                </Link>
+              ))}
+            </div>
+          ) : null}
           <div className="mb-2">
             {!liveCollapsed && <p className="label-overline mb-1.5 px-3">Пространства</p>}
             <div className="flex flex-col gap-0.5">

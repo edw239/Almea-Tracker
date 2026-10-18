@@ -10,6 +10,18 @@ export class CreateSpaceDto {
   @IsString()
   @MaxLength(500)
   description?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(10)
+  key?: string;
+}
+
+export class ChangeSpaceKeyDto {
+  @IsString()
+  @MinLength(2)
+  @MaxLength(10)
+  key!: string;
 }
 
 export class CreateFolderDto {

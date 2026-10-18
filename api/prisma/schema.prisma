@@ -63,6 +63,45 @@ enum FavoriteEntityType {
   TASK_LIST
   TASK
   TASK_VIEW
+  BOARD
+}
+
+enum BoardType {
+  KANBAN
+  SCRUM
+}
+
+enum BoardSwimlane {
+  NONE
+  ASSIGNEE
+  EPIC
+  BRAND
+  PRIORITY
+  QUERIES
+}
+
+enum BoardCardColor {
+  NONE
+  PRIORITY
+  TYPE
+  ASSIGNEE
+}
+
+enum SprintState {
+  FUTURE
+  ACTIVE
+  CLOSED
+}
+
+enum SprintEventType {
+  COMMITTED
+  ADDED
+  REMOVED
+  ESTIMATE_CHANGED
+  DONE
+  REOPENED
+  CLOSED_DONE
+  CLOSED_INCOMPLETE
 }
 
 enum NotificationCode {
@@ -134,6 +173,7 @@ model User {
   createdTasks           Task[]                    @relation("TaskCreator")
   assignedSchedules      TaskSchedule[]            @relation("ScheduleAssignee")
   stuckTasks             Task[]                    @relation("TaskStuckBy")
+  ownedBoards            Board[]
 
   @@index([isActive])
   @@map("users")
@@ -147,6 +187,8 @@ model TaskSpace {
   icon        String?
   isSystem    Boolean  @default(false) @map("is_system")
   systemKey   String?  @unique @map("system_key")
+  key         String   @unique @db.VarChar(10)
+  taskSeq     Int      @default(0) @map("task_seq")
   isArchived  Boolean  @default(false) @map("is_archived")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
@@ -155,8 +197,9 @@ model TaskSpace {
   folders   TaskFolder[]
   lists     TaskList[]
   statuses  TaskListStatus[]
-  templates TaskTemplate[]
-  taskTypes TaskType[]
+  templates    TaskTemplate[]
+  taskTypes    TaskType[]
+  boardSources BoardSource[]
 
   @@map("task_spaces")
 }
@@ -202,8 +245,9 @@ model TaskFolder {
   createdAt  DateTime @default(now()) @map("created_at")
   updatedAt  DateTime @updatedAt @map("updated_at")
 
-  space TaskSpace  @relation(fields: [spaceId], references: [id], onDelete: Cascade)
-  lists TaskList[]
+  space        TaskSpace     @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  lists        TaskList[]
+  boardSources BoardSource[]
 
   @@index([spaceId, position])
   @@map("task_folders")
@@ -229,8 +273,10 @@ model TaskList {
   statuses         TaskListStatus[]
   viewPreferences  TaskViewPreference[]
   views            TaskView[]
-  templates        TaskTemplate[]
-  schedules        TaskSchedule[]
+  templates         TaskTemplate[]
+  schedules         TaskSchedule[]
+  boardSources      BoardSource[]
+  defaultForBoards  Board[]          @relation("BoardDefaultList")
 
   @@unique([spaceId, systemKey])
   @@index([spaceId, position])
@@ -247,6 +293,7 @@ model TaskListStatus {
   order     Int
   category  TaskStatus
   isDefault Boolean    @default(false) @map("is_default")
+  isBacklog Boolean    @default(false) @map("is_backlog")
   createdAt DateTime   @default(now()) @map("created_at")
   updatedAt DateTime   @updatedAt @map("updated_at")
 
@@ -287,6 +334,12 @@ model Task {
   stuckReason      String?      @map("stuck_reason") @db.VarChar(500)
   stuckByUserId    String?      @map("stuck_by_user_id") @db.Uuid
   dueDateMoveCount Int          @default(0) @map("due_date_move_count")
+  key              String       @unique @db.VarChar(24)
+  rank             String       @unique @db.VarChar(64)
+  statusChangedAt  DateTime     @default(now()) @map("status_changed_at")
+  epicId           String?      @map("epic_id") @db.Uuid
+  storyPoints      Decimal?     @map("story_points") @db.Decimal(5, 1)
+  sprintId         String?      @map("sprint_id") @db.Uuid
   createdAt        DateTime     @default(now()) @map("created_at")
   updatedAt        DateTime     @updatedAt @map("updated_at")
 
@@ -307,7 +360,14 @@ model Task {
   relationsFrom TaskRelation[]    @relation("RelationFrom")
   relationsTo   TaskRelation[]    @relation("RelationTo")
   notifications TaskNotification[]
-  scheduleRuns  TaskScheduleRun[]
+  scheduleRuns      TaskScheduleRun[]
+  epic              Task?                 @relation("TaskEpic", fields: [epicId], references: [id], onDelete: SetNull)
+  epicChildren      Task[]                @relation("TaskEpic")
+  keyAliases        TaskKeyAlias[]
+  statusTransitions TaskStatusTransition[]
+  labels            TaskLabel[]
+  sprint            Sprint?               @relation(fields: [sprintId], references: [id], onDelete: SetNull)
+  sprintEvents      SprintEvent[]
 
   @@index([listId, deletedAt])
   @@index([listId, position])
@@ -322,6 +382,9 @@ model Task {
   @@index([isStuck])
   @@index([taskTypeId])
   @@index([dueDateMoveCount])
+  @@index([epicId])
+  @@index([sprintId])
+  @@index([rank])
   @@map("tasks")
 }
 
@@ -564,4 +627,174 @@ model UserFavorite {
   @@unique([userId, entityType, entityId])
   @@index([userId, position])
   @@map("user_favorites")
+}
+
+model TaskKeyAlias {
+  key       String   @id @db.VarChar(24)
+  taskId    String   @map("task_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at")
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([taskId])
+  @@map("task_key_aliases")
+}
+
+model TaskStatusTransition {
+  id               String      @id @default(uuid()) @db.Uuid
+  taskId           String      @map("task_id") @db.Uuid
+  fromStatus       TaskStatus? @map("from_status")
+  fromListStatusId String?     @map("from_list_status_id") @db.Uuid
+  fromCategory     TaskStatus? @map("from_category")
+  toStatus         TaskStatus  @map("to_status")
+  toListStatusId   String?     @map("to_list_status_id") @db.Uuid
+  toCategory       TaskStatus  @map("to_category")
+  actorUserId      String?     @map("actor_user_id") @db.Uuid
+  reason           String      @db.VarChar(40)
+  createdAt        DateTime    @default(now()) @map("created_at")
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([taskId, createdAt])
+  @@index([toCategory, createdAt])
+  @@map("task_status_transitions")
+}
+
+model Board {
+  id              String         @id @default(uuid()) @db.Uuid
+  name            String         @db.VarChar(120)
+  type            BoardType
+  ownerId         String         @map("owner_id") @db.Uuid
+  filter          Json?
+  swimlaneBy      BoardSwimlane  @default(NONE) @map("swimlane_by")
+  swimlaneQueries Json?          @map("swimlane_queries")
+  backlogEnabled  Boolean        @default(false) @map("backlog_enabled")
+  doneHideDays    Int?           @map("done_hide_days")
+  defaultListId   String?        @map("default_list_id") @db.Uuid
+  cardColorBy     BoardCardColor @default(NONE) @map("card_color_by")
+  cardFields      Json?          @map("card_fields")
+  isArchived      Boolean        @default(false) @map("is_archived")
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
+
+  owner        User               @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  defaultList  TaskList?          @relation("BoardDefaultList", fields: [defaultListId], references: [id], onDelete: SetNull)
+  sources      BoardSource[]
+  columns      BoardColumn[]
+  quickFilters BoardQuickFilter[]
+  sprints      Sprint[]
+
+  @@index([ownerId])
+  @@map("boards")
+}
+
+model BoardSource {
+  id       String  @id @default(uuid()) @db.Uuid
+  boardId  String  @map("board_id") @db.Uuid
+  spaceId  String? @map("space_id") @db.Uuid
+  folderId String? @map("folder_id") @db.Uuid
+  listId   String? @map("list_id") @db.Uuid
+
+  board  Board       @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  space  TaskSpace?  @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  folder TaskFolder? @relation(fields: [folderId], references: [id], onDelete: Cascade)
+  list   TaskList?   @relation(fields: [listId], references: [id], onDelete: Cascade)
+
+  @@index([boardId])
+  @@index([spaceId])
+  @@index([folderId])
+  @@index([listId])
+  @@map("board_sources")
+}
+
+model BoardColumn {
+  id          String   @id @default(uuid()) @db.Uuid
+  boardId     String   @map("board_id") @db.Uuid
+  name        String   @db.VarChar(80)
+  position    Float
+  statusNames String[] @map("status_names")
+  minWip      Int?     @map("min_wip")
+  maxWip      Int?     @map("max_wip")
+
+  board Board @relation(fields: [boardId], references: [id], onDelete: Cascade)
+
+  @@index([boardId, position])
+  @@map("board_columns")
+}
+
+model BoardQuickFilter {
+  id       String @id @default(uuid()) @db.Uuid
+  boardId  String @map("board_id") @db.Uuid
+  name     String @db.VarChar(80)
+  filter   Json
+  position Float
+
+  board Board @relation(fields: [boardId], references: [id], onDelete: Cascade)
+
+  @@index([boardId, position])
+  @@map("board_quick_filters")
+}
+
+model Label {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String   @db.VarChar(40)
+  nameKey   String   @unique @map("name_key") @db.VarChar(40)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  tasks TaskLabel[]
+
+  @@map("labels")
+}
+
+model TaskLabel {
+  taskId  String @map("task_id") @db.Uuid
+  labelId String @map("label_id") @db.Uuid
+
+  task  Task  @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  label Label @relation(fields: [labelId], references: [id], onDelete: Cascade)
+
+  @@id([taskId, labelId])
+  @@index([labelId])
+  @@map("task_labels")
+}
+
+model Sprint {
+  id        String      @id @default(uuid()) @db.Uuid
+  boardId   String      @map("board_id") @db.Uuid
+  name      String      @db.VarChar(120)
+  goal      String?     @db.VarChar(500)
+  state     SprintState @default(FUTURE)
+  startDate DateTime?   @map("start_date")
+  endDate   DateTime?   @map("end_date")
+  startedAt DateTime?   @map("started_at")
+  closedAt  DateTime?   @map("closed_at")
+  position  Float
+  createdAt DateTime    @default(now()) @map("created_at")
+  updatedAt DateTime    @updatedAt @map("updated_at")
+
+  board  Board         @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  tasks  Task[]
+  events SprintEvent[]
+
+  @@index([boardId, state])
+  @@index([boardId, position])
+  @@map("sprints")
+}
+
+model SprintEvent {
+  id           String          @id @default(uuid()) @db.Uuid
+  sprintId     String          @map("sprint_id") @db.Uuid
+  taskId       String?         @map("task_id") @db.Uuid
+  type         SprintEventType
+  storyPoints  Decimal?        @map("story_points") @db.Decimal(5, 1)
+  actorUserId  String?         @map("actor_user_id") @db.Uuid
+  details      Json?
+  createdAt    DateTime        @default(now()) @map("created_at")
+
+  sprint Sprint @relation(fields: [sprintId], references: [id], onDelete: Cascade)
+  task   Task?  @relation(fields: [taskId], references: [id], onDelete: SetNull)
+
+  @@index([sprintId, createdAt])
+  @@index([taskId])
+  @@map("sprint_events")
 }

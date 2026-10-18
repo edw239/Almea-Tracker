@@ -33,6 +33,7 @@ export class TaskHostService {
         description: 'System space для entity-lists (бренд / партия / сделка).',
         isSystem: true,
         systemKey: SYSTEM_SPACE_HOST,
+        key: 'BR',
       },
     });
   }

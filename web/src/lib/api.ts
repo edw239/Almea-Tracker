@@ -1,6 +1,17 @@
 import type { FavoriteEntityType, TaskPriority, TaskStatus, ViewType } from '../types'
 import type { AccountRole } from './account-role'
 import type { ApiListStatus, ApiSpace, ApiTask } from './mappers'
+import type {
+  BoardBacklogPayload,
+  BoardColumnInput,
+  BoardDetail,
+  BoardSummary,
+  BoardViewPayload,
+  BurndownPayload,
+  CreateBoardBody,
+  SprintReportPayload,
+  SprintRow,
+} from './board-types'
 
 const DEFAULT_TIMEOUT_MS = 15_000
 
@@ -209,6 +220,10 @@ export type TaskPatch = {
   reviewRequired?: boolean
   reviewRejectReason?: string
   taskTypeId?: string | null
+  epicId?: string | null
+  storyPoints?: number | null
+  labelIds?: string[]
+  sprintId?: string | null
 }
 
 export type MovePatch = {
@@ -569,4 +584,82 @@ export const api = {
         body: JSON.stringify(body),
       },
     ),
+  taskByKey: (key: string) => request<ApiTask>(`/api/tasks/by-key/${encodeURIComponent(key)}`),
+  boards: () => request<BoardSummary[]>('/api/boards'),
+  board: (id: string) => request<BoardDetail>(`/api/boards/${id}`),
+  createBoard: (body: CreateBoardBody) =>
+    request<BoardDetail>('/api/boards', { method: 'POST', body: JSON.stringify(body) }),
+  updateBoard: (id: string, body: Record<string, unknown>) =>
+    request<BoardDetail>(`/api/boards/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  archiveBoard: (id: string) => request<{ ok: true }>(`/api/boards/${id}`, { method: 'DELETE' }),
+  boardView: (id: string, query?: Record<string, string | undefined>) => {
+    const params = new URLSearchParams()
+    for (const [key, value] of Object.entries(query ?? {})) {
+      if (value) params.set(key, value)
+    }
+    const suffix = params.toString() ? `?${params}` : ''
+    return request<BoardViewPayload>(`/api/boards/${id}/view${suffix}`)
+  },
+  replaceBoardColumns: (id: string, columns: BoardColumnInput[]) =>
+    request<BoardColumnInput[]>(`/api/boards/${id}/columns`, {
+      method: 'PUT',
+      body: JSON.stringify({ columns }),
+    }),
+  addQuickFilter: (id: string, body: { name: string; filter: unknown }) =>
+    request<{ id: string; name: string }>(`/api/boards/${id}/quick-filters`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  removeQuickFilter: (boardId: string, filterId: string) =>
+    request<{ ok: true }>(`/api/boards/${boardId}/quick-filters/${filterId}`, { method: 'DELETE' }),
+  createBoardCard: (boardId: string, title: string) =>
+    request<ApiTask>(`/api/boards/${boardId}/cards`, { method: 'POST', body: JSON.stringify({ title }) }),
+  moveBoardCard: (
+    boardId: string,
+    taskId: string,
+    body: { columnId: string; laneKey?: string; beforeId?: string | null; afterId?: string | null; dueDate?: string | null },
+  ) =>
+    request<ApiTask>(`/api/boards/${boardId}/cards/${taskId}/move`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  boardBacklog: (boardId: string) => request<BoardBacklogPayload>(`/api/boards/${boardId}/backlog`),
+  createBacklogTask: (boardId: string, body: { title: string; listId?: string }) =>
+    request<ApiTask>(`/api/boards/${boardId}/backlog/tasks`, { method: 'POST', body: JSON.stringify(body) }),
+  boardSprints: (boardId: string) => request<SprintRow[]>(`/api/boards/${boardId}/sprints`),
+  createSprint: (boardId: string, body: { name: string; goal?: string; startDate?: string; endDate?: string }) =>
+    request<SprintRow>(`/api/boards/${boardId}/sprints`, { method: 'POST', body: JSON.stringify(body) }),
+  startSprint: (sprintId: string, confirmMissingDue: boolean) =>
+    request<SprintRow>(`/api/sprints/${sprintId}/start`, {
+      method: 'POST',
+      body: JSON.stringify({ confirmMissingDue }),
+    }),
+  completeSprint: (
+    sprintId: string,
+    body: {
+      unfinishedTo: 'backlog' | 'sprint'
+      sprintId?: string
+      createSprint?: { name: string; goal?: string; endDate?: string }
+    },
+  ) => request<SprintRow>(`/api/sprints/${sprintId}/complete`, { method: 'POST', body: JSON.stringify(body) }),
+  boardBurndown: (boardId: string, metric: 'points' | 'count') =>
+    request<BurndownPayload>(`/api/boards/${boardId}/reports/burndown?metric=${metric}`),
+  boardSprintReport: (boardId: string) => request<SprintReportPayload>(`/api/boards/${boardId}/reports/sprint`),
+  boardVelocity: (boardId: string) => request<{ sprints: Array<{ sprintId: string; name: string; commitment: number; completed: number }> }>(`/api/boards/${boardId}/reports/velocity`),
+  boardCfd: (boardId: string) =>
+    request<{ points: Array<{ date: string; column: string; count: number }>; approximate: boolean }>(
+      `/api/boards/${boardId}/reports/cfd`,
+    ),
+  boardCycle: (boardId: string) =>
+    request<{ samples: Array<{ taskId: string; days: number }>; median: number | null; approximate: boolean }>(
+      `/api/boards/${boardId}/reports/cycle`,
+    ),
+  searchLabels: (query: string) => request<Array<{ id: string; name: string }>>(`/api/labels?query=${encodeURIComponent(query)}`),
+  createLabel: (name: string) =>
+    request<{ id: string; name: string }>('/api/labels', { method: 'POST', body: JSON.stringify({ name }) }),
+  createTaskType: (spaceId: string, body: { key: string; name: string; color?: string }) =>
+    request<{ id: string; key: string; name: string }>(`/api/task-spaces/${spaceId}/task-types`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
 }

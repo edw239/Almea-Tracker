@@ -3,6 +3,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { Building2, Folder, ListTodo, Search, User } from '../../lib/icons'
+import { api } from '../../lib/api'
+import { TASK_KEY_PATTERN } from '../../lib/space-key'
 import { searchIndex, type SearchHit, type SearchResultKind } from '../../lib/search-index'
 import { cn } from '../../lib/utils'
 import { useStore } from '../../store'
@@ -73,10 +75,36 @@ export function GlobalSearch({ compact = false, className }: GlobalSearchProps):
     return out
   }, [store.lists, store.spaces, store.tasks, store.users])
 
-  const results = useMemo(
+  const [keyHit, setKeyHit] = useState<SearchHit | null>(null)
+  const indexed = useMemo(
     () => searchIndex(docs, debouncedQuery),
     [docs, debouncedQuery],
   )
+  const results = keyHit ? [keyHit, ...indexed.filter((hit) => hit.id !== keyHit.id)] : indexed
+
+  useEffect(() => {
+    const query = debouncedQuery.trim().toUpperCase()
+    if (!TASK_KEY_PATTERN.test(query)) {
+      setKeyHit(null)
+      return
+    }
+    let cancelled = false
+    void api.taskByKey(query).then((task) => {
+      if (cancelled) return
+      setKeyHit({
+        id: task.id,
+        kind: 'task',
+        title: `${task.key ?? query} ${task.title}`,
+        to: `/browse/${query}`,
+        score: 1000,
+      })
+    }).catch(() => {
+      if (!cancelled) setKeyHit(null)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [debouncedQuery])
 
   const updatePanelPosition = useCallback((): void => {
     const anchor = anchorRef.current

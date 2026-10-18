@@ -17,7 +17,9 @@ export function assertDelegationHasDue(
   actorUserId: string,
   assigneeIds: readonly string[],
   dueDate: string | null | undefined,
+  options?: { preparing?: boolean },
 ): void {
+  if (options?.preparing) return;
   if (isDelegationWithoutDue(actorUserId, assigneeIds, dueDate)) {
     throw new AppError(
       ErrorCode.TASK_DELEGATION_REQUIRES_DUE_DATE,

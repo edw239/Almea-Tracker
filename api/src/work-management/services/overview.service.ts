@@ -63,6 +63,10 @@ export class OverviewService {
       ...visibility,
     };
 
+    const notInBacklog: Prisma.TaskWhereInput = {
+      OR: [{ listStatusId: null }, { listStatus: { isBacklog: false } }],
+    };
+
     const activeBlocker: Prisma.TaskWhereInput = {
       relationsTo: {
         some: {
@@ -82,6 +86,7 @@ export class OverviewService {
           status: { notIn: [TaskStatus.DONE, TaskStatus.CANCELLED] },
           assignees: { none: {} },
           createdAt: { lt: unassignedBefore },
+          ...notInBacklog,
         },
         orderBy: { createdAt: 'asc' },
         take: OVERVIEW_BLOCK_LIMIT,
@@ -93,6 +98,7 @@ export class OverviewService {
           status: { in: [TaskStatus.OPEN, TaskStatus.IN_PROGRESS] },
           updatedAt: { lt: staleBefore },
           NOT: activeBlocker,
+          ...notInBacklog,
         },
         orderBy: { updatedAt: 'asc' },
         take: OVERVIEW_BLOCK_LIMIT,

@@ -34,6 +34,11 @@ export class TasksController {
     return this.tasks.bulkUpdate(user, dto);
   }
 
+  @Get('tasks/by-key/:key')
+  byKey(@CurrentUser() user: AuthUser, @Param('key') key: string) {
+    return this.tasks.getByKey(user, key);
+  }
+
   @Get('tasks/:taskId')
   get(@CurrentUser() user: AuthUser, @Param('taskId', ParseUUIDPipe) taskId: string) {
     return this.tasks.getById(user, taskId);

@@ -5,6 +5,8 @@ import type { AuthUser } from '../../identity/auth/jwt.strategy';
 import { PrismaService } from '../../prisma/prisma.service';
 import { TaskSpaceAccessService } from '../access/task-space-access.service';
 import { TaskListStatusesService } from './task-list-statuses.service';
+import { TaskStatusService } from './task-status.service';
+import { resolveDualStatus, StatusReason } from '../utils/task-status.util';
 
 @Injectable()
 export class TaskListStatusesAdminService {
@@ -12,6 +14,7 @@ export class TaskListStatusesAdminService {
     private readonly prisma: PrismaService,
     private readonly spaces: TaskSpaceAccessService,
     private readonly statuses: TaskListStatusesService,
+    private readonly taskStatus: TaskStatusService,
   ) {}
 
   async createForList(
@@ -67,9 +70,33 @@ export class TaskListStatusesAdminService {
     });
 
     if (input.category && input.category !== row.category) {
-      await this.prisma.task.updateMany({
-        where: { listStatusId: statusId },
-        data: { status: input.category },
+      const tasks = await this.prisma.task.findMany({
+        where: { listStatusId: statusId, deletedAt: null },
+      });
+      const columns = await this.statuses.resolveForList(row.listId);
+      await this.prisma.$transaction(async (tx) => {
+        for (const task of tasks) {
+          const synced = resolveDualStatus(task, columns, { listStatusId: statusId });
+          synced.status = input.category!;
+          const at = await this.taskStatus.commit(tx, {
+            taskId: task.id,
+            before: task,
+            after: synced,
+            columns,
+            actorUserId: user.id,
+            reason: StatusReason.UPDATE,
+            sprintId: task.sprintId,
+            storyPoints: task.storyPoints,
+          });
+          await tx.task.update({
+            where: { id: task.id },
+            data: {
+              status: input.category,
+              completedAt: synced.completedAt,
+              statusChangedAt: at,
+            },
+          });
+        }
       });
     }
 
@@ -97,9 +124,33 @@ export class TaskListStatusesAdminService {
       if (!target) {
         throw AppError.badRequest('Целевая колонка не найдена');
       }
-      await this.prisma.task.updateMany({
-        where: { listStatusId: statusId },
-        data: { listStatusId: reassignToStatusId, status: target.category },
+      const tasks = await this.prisma.task.findMany({
+        where: { listStatusId: statusId, deletedAt: null },
+      });
+      const columns = await this.statuses.resolveForList(row.listId);
+      await this.prisma.$transaction(async (tx) => {
+        for (const task of tasks) {
+          const synced = resolveDualStatus(task, columns, { listStatusId: target.id });
+          const at = await this.taskStatus.commit(tx, {
+            taskId: task.id,
+            before: task,
+            after: synced,
+            columns,
+            actorUserId: user.id,
+            reason: StatusReason.STATUS_DELETED,
+            sprintId: task.sprintId,
+            storyPoints: task.storyPoints,
+          });
+          await tx.task.update({
+            where: { id: task.id },
+            data: {
+              listStatusId: target.id,
+              status: synced.status,
+              completedAt: synced.completedAt,
+              statusChangedAt: at,
+            },
+          });
+        }
       });
     }
 

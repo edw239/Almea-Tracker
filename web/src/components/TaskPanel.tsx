@@ -1,8 +1,10 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../auth'
-import { api } from '../lib/api'
+import { ApiError, api } from '../lib/api'
+import type { SprintRow } from '../lib/board-types'
 import { formatDateTime, PRIORITY_LABEL } from '../lib/format'
+import { loadSpaceEpics, loadSpaceSprints, type EpicOption } from '../lib/space-catalog'
 import { resolveStatusesForList } from '../lib/status'
 import { useStore } from '../store'
 import type { Task } from '../types'
@@ -36,6 +38,12 @@ export function TaskPanel({ task, onClose }: { task: Task; onClose?: () => void 
     task.reviewRequired && isAssignee && !isCreator
       ? statuses.filter((item) => item.category !== 'DONE')
       : statuses
+  const spaceId = list?.spaceId ?? ''
+  const [epics, setEpics] = useState<EpicOption[]>([])
+  const [sprints, setSprints] = useState<SprintRow[]>([])
+  const [labels, setLabels] = useState<Array<{ id: string; name: string }>>(task.labels ?? [])
+  const [labelName, setLabelName] = useState('')
+  const [points, setPoints] = useState(task.storyPoints == null ? '' : String(task.storyPoints))
   const reviewColumn = statuses.find((item) => item.name === 'На проверке')
   const inProgressColumn = statuses.find((item) => item.name === 'В работе')
   const doneColumn = statuses.find((item) => item.category === 'DONE')
@@ -76,6 +84,54 @@ export function TaskPanel({ task, onClose }: { task: Task; onClose?: () => void 
     }
   }, [list?.spaceId])
 
+  useEffect(() => {
+    setPoints(task.storyPoints == null ? '' : String(task.storyPoints))
+    setLabels(task.labels ?? [])
+  }, [task.id, task.labels, task.storyPoints])
+
+  useEffect(() => {
+    if (!spaceId) return
+    let cancelled = false
+    void loadSpaceEpics(spaceId, store.lists).then((rows) => {
+      if (!cancelled) setEpics(rows)
+    }).catch(() => {
+      if (!cancelled) setEpics([])
+    })
+    void loadSpaceSprints(spaceId, store.lists).then((rows) => {
+      if (!cancelled) setSprints(rows)
+    }).catch(() => {
+      if (!cancelled) setSprints([])
+    })
+    void api.task(task.id).then((row) => {
+      if (cancelled || !row.labels) return
+      setLabels(row.labels.map((item) => ({ id: item.label.id, name: item.label.name })))
+    }).catch(() => undefined)
+    return () => {
+      cancelled = true
+    }
+  }, [spaceId, store.lists, task.id])
+
+  async function addLabel(event: FormEvent) {
+    event.preventDefault()
+    const name = labelName.trim()
+    if (!name) return
+    try {
+      const found = await api.searchLabels(name)
+      const match = found.find((item) => item.name.toLocaleLowerCase('ru-RU') === name.toLocaleLowerCase('ru-RU'))
+      const label = match ?? (await api.createLabel(name))
+      if (labels.some((item) => item.id === label.id)) {
+        setLabelName('')
+        return
+      }
+      const next = [...labels, label]
+      setLabels(next)
+      setLabelName('')
+      await store.patchTask(task.id, { labelIds: next.map((item) => item.id) })
+    } catch (caught) {
+      setStatusError(caught instanceof ApiError ? caught.message : 'Не удалось добавить метку')
+    }
+  }
+
   const brandHref = task.hostEntityId
     ? `/brands/${task.hostEntityId}`
     : task.domainLabel && task.domainEntityType && task.domainEntityId
@@ -86,7 +142,10 @@ export function TaskPanel({ task, onClose }: { task: Task; onClose?: () => void 
     <aside className="panel sticky top-0 h-screen overflow-y-auto border-l border-border bg-surface px-5 py-6 scrollbar-subtle">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <p className="label-overline mb-1">{list?.name}</p>
+          <p className="label-overline mb-1">
+            {task.key ? `${task.key} · ` : ''}
+            {list?.name}
+          </p>
           <input
             className="w-full border-0 bg-transparent font-display text-[1.375rem] font-medium leading-tight tracking-[-0.03em] text-foreground outline-none focus:shadow-none"
             value={title}
@@ -174,6 +233,80 @@ export function TaskPanel({ task, onClose }: { task: Task; onClose?: () => void 
             />
           </div>
         ) : null}
+      </div>
+
+      <div className="field">
+        <label htmlFor={`points-${task.id}`}>Оценка</label>
+        <Input
+          id={`points-${task.id}`}
+          inputMode="decimal"
+          value={points}
+          onChange={(event) => setPoints(event.target.value)}
+          onBlur={() => {
+            const trimmed = points.trim()
+            const next = trimmed === '' ? null : Number(trimmed)
+            if (next != null && Number.isNaN(next)) return
+            if (next === (task.storyPoints ?? null)) return
+            void store.patchTask(task.id, { storyPoints: next })
+          }}
+        />
+      </div>
+      <div className="field">
+        <label htmlFor={`epic-${task.id}`}>Эпик</label>
+        <Select
+          id={`epic-${task.id}`}
+          value={task.epicId ?? ''}
+          options={[
+            { value: '', label: 'Без эпика' },
+            ...epics.map((epic) => ({ value: epic.id, label: epic.title })),
+          ]}
+          onChange={(epicId) => void store.patchTask(task.id, { epicId: epicId || null })}
+        />
+      </div>
+      <div className="field">
+        <label htmlFor={`sprint-${task.id}`}>Спринт</label>
+        <Select
+          id={`sprint-${task.id}`}
+          value={task.sprintId ?? ''}
+          options={[
+            { value: '', label: 'Без спринта' },
+            ...sprints.map((sprint) => ({ value: sprint.id, label: sprint.name })),
+            ...(task.sprintId && !sprints.some((sprint) => sprint.id === task.sprintId)
+              ? [{ value: task.sprintId, label: 'Текущий спринт' }]
+              : []),
+          ]}
+          onChange={(sprintId) => void store.patchTask(task.id, { sprintId: sprintId || null })}
+        />
+      </div>
+      <div className="field">
+        <label>Метки</label>
+        <div className="task-meta">
+          {labels.map((label) => (
+            <button
+              key={label.id}
+              type="button"
+              className={chipClass(true)}
+              onClick={() => {
+                const next = labels.filter((item) => item.id !== label.id)
+                setLabels(next)
+                void store.patchTask(task.id, { labelIds: next.map((item) => item.id) })
+              }}
+            >
+              {label.name}
+            </button>
+          ))}
+        </div>
+        <form className="mt-2 flex gap-2" onSubmit={(event) => void addLabel(event)}>
+          <Input
+            aria-label="Метка"
+            value={labelName}
+            onChange={(event) => setLabelName(event.target.value)}
+            placeholder="Метка"
+          />
+          <Button type="submit" size="sm" variant="outline">
+            Добавить
+          </Button>
+        </form>
       </div>
 
       <div className="field">

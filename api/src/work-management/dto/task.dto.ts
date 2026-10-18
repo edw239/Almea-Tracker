@@ -1,6 +1,6 @@
 import { TaskPriority, TaskStatus } from '@prisma/client';
-import { IsArray, IsBoolean, IsDateString, IsEnum, IsNumber, IsOptional, IsString, IsUUID, MaxLength, MinLength, ValidateIf } from 'class-validator';
-import { TITLE_MAX_LENGTH } from '../../common/constants';
+import { IsArray, IsBoolean, IsDateString, IsEnum, IsNumber, IsOptional, IsString, IsUUID, Max, MaxLength, Min, MinLength, ValidateIf } from 'class-validator';
+import { STORY_POINTS_MAX, TITLE_MAX_LENGTH } from '../../common/constants';
 
 export class CreateTaskDto {
   @IsString()
@@ -38,6 +38,37 @@ export class CreateTaskDto {
   @ValidateIf((_, value) => value !== null)
   @IsUUID()
   hostEntityId?: string | null;
+
+  @IsOptional()
+  @IsUUID()
+  listStatusId?: string;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsUUID()
+  taskTypeId?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsUUID()
+  epicId?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsNumber()
+  @Min(0)
+  @Max(STORY_POINTS_MAX)
+  storyPoints?: number | null;
+
+  @IsOptional()
+  @IsArray()
+  @IsUUID('4', { each: true })
+  labelIds?: string[];
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsUUID()
+  sprintId?: string | null;
 }
 
 export class UpdateTaskDto {
@@ -109,6 +140,28 @@ export class UpdateTaskDto {
   @ValidateIf((_, value) => value !== null)
   @IsUUID()
   taskTypeId?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsUUID()
+  epicId?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsNumber()
+  @Min(0)
+  @Max(STORY_POINTS_MAX)
+  storyPoints?: number | null;
+
+  @IsOptional()
+  @IsArray()
+  @IsUUID('4', { each: true })
+  labelIds?: string[];
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsUUID()
+  sprintId?: string | null;
 }
 
 export class MoveTaskDto {
@@ -137,6 +190,40 @@ export class MoveTaskDto {
   @IsString()
   @MaxLength(500)
   reviewRejectReason?: string;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsUUID()
+  rankBeforeId?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsUUID()
+  rankAfterId?: string | null;
+
+  @IsOptional()
+  @IsEnum(TaskPriority)
+  priority?: TaskPriority;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsUUID()
+  epicId?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsUUID()
+  hostEntityId?: string | null;
+
+  @IsOptional()
+  @IsArray()
+  @IsUUID('4', { each: true })
+  assigneeIds?: string[];
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsDateString()
+  dueDate?: string | null;
 }
 
 export class BulkUpdateTasksDto {

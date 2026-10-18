@@ -44,7 +44,9 @@ const canSmoke =
   it('login → list → create → move → inbox → template', async () => {
     const login = await agent.post('/api/auth/login').send({ email, password }).expect(201);
     expect(login.body.user?.email).toBe(email.toLowerCase());
-    expect(login.headers['set-cookie']?.join(';') ?? '').toContain(AUTH_COOKIE_NAME);
+    const setCookie = login.headers['set-cookie'];
+    const cookieHeader = Array.isArray(setCookie) ? setCookie.join(';') : String(setCookie ?? '');
+    expect(cookieHeader).toContain(AUTH_COOKIE_NAME);
 
     const me = await agent.get('/api/auth/me').expect(200);
     expect(me.body.id).toBeTruthy();

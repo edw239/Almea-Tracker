@@ -4,6 +4,8 @@ import type { SummaryDayBounds } from '../../identity/utils/zoned-day.util';
 export type BucketTaskInput = {
   dueDate: Date | null;
   status: TaskStatus;
+  /** Preparation column. Those tasks stay off My Work buckets. */
+  inBacklog?: boolean;
 };
 
 export type MyWorkBucketKey = 'overdue' | 'today' | 'later' | 'none';
@@ -31,6 +33,7 @@ export function bucketTasksByDue<T extends BucketTaskInput>(
   let inProgress = 0;
 
   for (const task of tasks) {
+    if (task.inBacklog) continue;
     if (task.status === TaskStatus.IN_PROGRESS) {
       inProgress += 1;
     }

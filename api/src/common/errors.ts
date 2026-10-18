@@ -9,6 +9,14 @@ export const ErrorCode = {
   CONFLICT: 'CONFLICT',
   TASK_DELEGATION_REQUIRES_DUE_DATE: 'TASK_DELEGATION_REQUIRES_DUE_DATE',
   TASK_REVIEW_BLOCKS_DONE: 'TASK_REVIEW_BLOCKS_DONE',
+  BOARD_COLUMN_UNAVAILABLE: 'BOARD_COLUMN_UNAVAILABLE',
+  SPRINT_ALREADY_ACTIVE: 'SPRINT_ALREADY_ACTIVE',
+  SPRINT_START_NEEDS_DUE: 'SPRINT_START_NEEDS_DUE',
+  SPACE_KEY_INVALID: 'SPACE_KEY_INVALID',
+  SPACE_KEY_TAKEN: 'SPACE_KEY_TAKEN',
+  LABEL_MATCHES_BRAND: 'LABEL_MATCHES_BRAND',
+  EPIC_INVALID: 'EPIC_INVALID',
+  RANK_ORDER: 'RANK_ORDER',
 } as const;
 
 export type ErrorCodeValue = (typeof ErrorCode)[keyof typeof ErrorCode];
@@ -16,8 +24,13 @@ export type ErrorCodeValue = (typeof ErrorCode)[keyof typeof ErrorCode];
 export class AppError extends HttpException {
   readonly code: ErrorCodeValue;
 
-  constructor(code: ErrorCodeValue, message: string, status: HttpStatus) {
-    super({ code, message }, status);
+  constructor(
+    code: ErrorCodeValue,
+    message: string,
+    status: HttpStatus,
+    details?: Record<string, unknown>,
+  ) {
+    super(details ? { code, message, ...details } : { code, message }, status);
     this.code = code;
   }
 

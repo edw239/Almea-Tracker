@@ -1,9 +1,9 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, UseGuards } from '@nestjs/common';
 import { ApiCookieAuth, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../identity/auth/current-user.decorator';
 import { JwtAuthGuard } from '../identity/auth/jwt-auth.guard';
 import type { AuthUser } from '../identity/auth/jwt.strategy';
-import { CreateFolderDto, CreateListDto, CreateSpaceDto } from './dto/space.dto';
+import { ChangeSpaceKeyDto, CreateFolderDto, CreateListDto, CreateSpaceDto } from './dto/space.dto';
 import { TaskSpacesService } from './services/task-spaces.service';
 
 @ApiTags('spaces')
@@ -20,7 +20,16 @@ export class TaskSpacesController {
 
   @Post('task-spaces')
   create(@CurrentUser() user: AuthUser, @Body() dto: CreateSpaceDto) {
-    return this.spaces.createSpace(user, dto.name, dto.description);
+    return this.spaces.createSpace(user, dto.name, dto.description, dto.key);
+  }
+
+  @Patch('task-spaces/:spaceId/key')
+  changeKey(
+    @CurrentUser() user: AuthUser,
+    @Param('spaceId', ParseUUIDPipe) spaceId: string,
+    @Body() dto: ChangeSpaceKeyDto,
+  ) {
+    return this.spaces.changeKey(user, spaceId, dto.key);
   }
 
   @Get('task-spaces/:spaceId')

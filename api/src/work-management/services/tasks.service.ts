@@ -1,8 +1,9 @@
 import { Injectable } from '@nestjs/common';
+import { HttpStatus } from '@nestjs/common';
 import { NotificationCode, Prisma, TaskPriority, TaskStatus } from '@prisma/client';
+import { EPIC_TYPE_KEY, STORY_POINTS_MAX, TASK_KEY_PATTERN } from '../../common/constants';
 import { ASSIGNEE_ONLY_FIELDS, STUCK_REASON_MAX_LENGTH } from '../../common/constants';
 import { AppError, ErrorCode } from '../../common/errors';
-import { HttpStatus } from '@nestjs/common';
 import type { AuthUser } from '../../identity/auth/jwt.strategy';
 import { PrismaService } from '../../prisma/prisma.service';
 import { TaskAccessService } from '../access/task-access.service';
@@ -25,6 +26,10 @@ import { TaskCollabService } from './task-collab.service';
 import { HostEntitiesService } from './host-entities.service';
 import { TaskListStatusesService } from './task-list-statuses.service';
 import { TaskNotificationsService } from './task-notifications.service';
+import { TaskIdentityService } from './task-identity.service';
+import { TaskStatusService } from './task-status.service';
+import { SprintsService } from '../boards/sprints.service';
+import { isBacklogColumn, resolveDualStatus, StatusReason } from '../utils/task-status.util';
 
 type CreateInput = {
   title: string;
@@ -35,6 +40,12 @@ type CreateInput = {
   reviewRequired?: boolean;
   parentTaskId?: string;
   hostEntityId?: string | null;
+  listStatusId?: string;
+  taskTypeId?: string | null;
+  epicId?: string | null;
+  storyPoints?: number | null;
+  labelIds?: string[];
+  sprintId?: string | null;
 };
 
 type UpdateInput = {
@@ -52,6 +63,10 @@ type UpdateInput = {
   domainLabel?: string | null;
   hostEntityId?: string | null;
   taskTypeId?: string | null;
+  epicId?: string | null;
+  storyPoints?: number | null;
+  labelIds?: string[];
+  sprintId?: string | null;
 };
 
 type MoveInput = {
@@ -61,6 +76,13 @@ type MoveInput = {
   afterTaskId?: string | null;
   position?: number;
   reviewRejectReason?: string;
+  rankBeforeId?: string | null;
+  rankAfterId?: string | null;
+  priority?: TaskPriority;
+  epicId?: string | null;
+  hostEntityId?: string | null;
+  assigneeIds?: string[];
+  dueDate?: string | null;
 };
 
 type BulkInput = {
@@ -81,6 +103,9 @@ export class TasksService {
     private readonly collab: TaskCollabService,
     private readonly notifications: TaskNotificationsService,
     private readonly hostEntities: HostEntitiesService,
+    private readonly identity: TaskIdentityService,
+    private readonly taskStatus: TaskStatusService,
+    private readonly sprints: SprintsService,
   ) {}
 
   async statusesForList(user: AuthUser, listId: string) {
@@ -200,6 +225,18 @@ export class TasksService {
     };
   }
 
+  async getByKey(user: AuthUser, key: string) {
+    const normalized = key.trim().toUpperCase();
+    if (!TASK_KEY_PATTERN.test(normalized)) {
+      throw AppError.badRequest('Некорректный ключ задачи');
+    }
+    const taskId = await this.identity.findTaskIdByKey(this.prisma, normalized);
+    if (!taskId) {
+      throw AppError.notFound();
+    }
+    return this.getById(user, taskId);
+  }
+
   async getById(user: AuthUser, taskId: string) {
     const task = await this.taskAccess.getVisibleTask(user, taskId);
     return this.prisma.task.findFirstOrThrow({
@@ -214,6 +251,7 @@ export class TasksService {
         relationsTo: true,
         children: { where: { deletedAt: null }, orderBy: { position: 'asc' } },
         list: { select: { id: true, name: true, spaceId: true } },
+        labels: { include: { label: { select: { id: true, name: true } } } },
       },
     });
   }
@@ -226,52 +264,95 @@ export class TasksService {
       throw AppError.notFound();
     }
     await this.spaceAccess.assertCanCreateTaskInList(user, list);
-    if (input.parentTaskId) {
-      const parent = await this.prisma.task.findFirst({
-        where: { id: input.parentTaskId, listId, deletedAt: null },
-      });
-      if (!parent) {
-        throw AppError.notFound('Родительская задача не найдена');
-      }
+    const parent = input.parentTaskId
+      ? await this.prisma.task.findFirst({
+          where: { id: input.parentTaskId, listId, deletedAt: null },
+        })
+      : null;
+    if (input.parentTaskId && !parent) {
+      throw AppError.notFound('Родительская задача не найдена');
     }
     const columns = await this.statuses.resolveForList(listId);
-    const open = this.statuses.defaultForCategory(columns, TaskStatus.OPEN);
+    const chosen = input.listStatusId
+      ? columns.find((column) => column.id === input.listStatusId)
+      : this.statuses.defaultForCategory(columns, TaskStatus.OPEN);
+    if (input.listStatusId && !chosen) {
+      throw AppError.notFound('Статус списка не найден');
+    }
+    const hostLink = await this.resolveHostEntityLink(input.hostEntityId);
+    const assigneeIds = resolveCreateAssigneeIds(user.id, input.assigneeIds);
+    assertDelegationHasDue(user.id, assigneeIds, input.dueDate, {
+      preparing: isBacklogColumn(columns, chosen?.id ?? null),
+    });
+    assertStoryPoints(input.storyPoints);
+    const reviewRequired = resolveReviewRequired(user.id, assigneeIds, input.reviewRequired);
+    const epicId = input.epicId === undefined ? (parent?.epicId ?? null) : input.epicId;
     const last = await this.prisma.task.findFirst({
       where: { listId, deletedAt: null, parentTaskId: null },
       orderBy: { position: 'desc' },
     });
-    const hostLink = await this.resolveHostEntityLink(input.hostEntityId);
-    const assigneeIds = resolveCreateAssigneeIds(user.id, input.assigneeIds);
-    assertDelegationHasDue(user.id, assigneeIds, input.dueDate);
-    const reviewRequired = resolveReviewRequired(user.id, assigneeIds, input.reviewRequired);
-    return this.prisma.task.create({
-      data: {
-        listId,
-        parentTaskId: input.parentTaskId ?? null,
-        ownerUserId: user.id,
-        createdByUserId: user.id,
-        title: input.title.trim(),
-        description: input.description?.trim(),
-        status: TaskStatus.OPEN,
-        listStatusId: open?.id ?? null,
-        priority: input.priority ?? TaskPriority.MEDIUM,
-        dueDate: input.dueDate ? new Date(input.dueDate) : null,
-        position: nextPosition(last?.position),
-        reviewRequired,
-        assignees:
-          assigneeIds.length > 0
-            ? { create: assigneeIds.map((userId) => ({ userId })) }
-            : undefined,
-        ...(hostLink
-          ? {
-              hostEntityId: hostLink.id,
-              domainEntityType: hostLink.entityType,
-              domainEntityId: hostLink.id,
-              domainLabel: hostLink.name,
-            }
-          : {}),
-      },
-      include: { assignees: true },
+    return this.prisma.$transaction(async (tx) => {
+      if (epicId) {
+        await this.assertEpicTarget(tx, {
+          taskId: null,
+          listId,
+          taskTypeId: input.taskTypeId ?? null,
+          epicId,
+        });
+      }
+      const key = await this.identity.nextKey(tx, list.spaceId);
+      const rank = await this.identity.nextRank(tx);
+      const at = new Date();
+      const status = chosen?.category ?? TaskStatus.OPEN;
+      const created = await tx.task.create({
+        data: {
+          listId,
+          parentTaskId: input.parentTaskId ?? null,
+          ownerUserId: user.id,
+          createdByUserId: user.id,
+          title: input.title.trim(),
+          description: input.description?.trim(),
+          status,
+          listStatusId: chosen?.id ?? null,
+          priority: input.priority ?? TaskPriority.MEDIUM,
+          dueDate: input.dueDate ? new Date(input.dueDate) : null,
+          position: nextPosition(last?.position),
+          reviewRequired,
+          key,
+          rank,
+          statusChangedAt: at,
+          epicId,
+          taskTypeId: input.taskTypeId ?? null,
+          storyPoints: input.storyPoints ?? null,
+          sprintId: input.sprintId ?? null,
+          assignees:
+            assigneeIds.length > 0
+              ? { create: assigneeIds.map((assigneeId) => ({ userId: assigneeId })) }
+              : undefined,
+          ...(hostLink
+            ? {
+                hostEntityId: hostLink.id,
+                domainEntityType: hostLink.entityType,
+                domainEntityId: hostLink.id,
+                domainLabel: hostLink.name,
+              }
+            : {}),
+        },
+        include: { assignees: true },
+      });
+      if (input.labelIds?.length) {
+        await this.replaceLabels(tx, created.id, input.labelIds);
+      }
+      await this.taskStatus.commit(tx, {
+        taskId: created.id,
+        before: null,
+        after: { status, listStatusId: chosen?.id ?? null, completedAt: null },
+        columns,
+        actorUserId: user.id,
+        reason: StatusReason.CREATE,
+        at,
+      });
+      return created;
     });
   }
 
@@ -303,9 +384,11 @@ export class TasksService {
           ? previousDue.toISOString()
           : null
         : input.dueDate;
-    assertDelegationHasDue(user.id, nextAssigneeIds, nextDue);
     const columns = await this.statuses.resolveForList(task.listId);
-    const synced = this.syncDualStatus(task, columns, input);
+    const synced = resolveDualStatus(task, columns, input);
+    const preparing = isBacklogColumn(columns, synced.listStatusId);
+    assertDelegationHasDue(user.id, nextAssigneeIds, nextDue, { preparing });
+    assertStoryPoints(input.storyPoints);
     const reviewPatch = this.resolveReviewTransition({
       task,
       columns,
@@ -328,6 +411,19 @@ export class TasksService {
           ? null
           : await this.resolveHostEntityLink(input.hostEntityId);
     const updated = await this.prisma.$transaction(async (tx) => {
+      if (input.epicId !== undefined) {
+        await this.assertEpicTarget(tx, {
+          taskId,
+          listId: task.listId,
+          taskTypeId: input.taskTypeId === undefined ? task.taskTypeId : input.taskTypeId,
+          epicId: input.epicId,
+        });
+      } else if (input.taskTypeId) {
+        await this.assertNotNestingEpic(tx, taskId, input.taskTypeId, task.epicId);
+      }
+      if (input.labelIds) {
+        await this.replaceLabels(tx, taskId, input.labelIds);
+      }
       if (input.assigneeIds) {
         await tx.taskAssignee.deleteMany({ where: { taskId } });
         if (input.assigneeIds.length > 0) {
@@ -370,6 +466,38 @@ export class TasksService {
           }
         }
       }
+      const statusAt = synced.changed
+        ? await this.taskStatus.commit(tx, {
+            taskId,
+            before: {
+              status: task.status,
+              listStatusId: task.listStatusId,
+              completedAt: task.completedAt,
+            },
+            after: synced,
+            columns,
+            actorUserId: user.id,
+            reason: StatusReason.UPDATE,
+            sprintId: input.sprintId === undefined ? task.sprintId : input.sprintId,
+            storyPoints: input.storyPoints === undefined ? task.storyPoints : input.storyPoints,
+          })
+        : undefined;
+      if (input.sprintId !== undefined && input.sprintId !== task.sprintId) {
+        await this.sprints.noteMembership(tx, user.id, task, input.sprintId);
+      }
+      if (
+        input.storyPoints !== undefined &&
+        task.sprintId &&
+        !samePoints(task.storyPoints, input.storyPoints)
+      ) {
+        await this.sprints.noteEstimate(tx, user.id, task.sprintId, taskId, input.storyPoints, task.storyPoints);
+      }
+      if (input.epicId !== undefined && input.epicId !== task.epicId) {
+        await tx.task.updateMany({
+          where: { parentTaskId: taskId, deletedAt: null },
+          data: { epicId: input.epicId },
+        });
+      }
       return tx.task.update({
         where: { id: taskId },
         data: {
@@ -377,6 +505,7 @@ export class TasksService {
           description: input.description,
           status: synced.status,
           listStatusId: synced.listStatusId,
+          statusChangedAt: statusAt,
           priority: input.priority,
           dueDate: nextDueDate,
           ...(dueMoveIncrement
@@ -386,6 +515,9 @@ export class TasksService {
           reviewRequired: nextReviewRequired,
           submittedAt: reviewPatch.submittedAt,
           taskTypeId: input.taskTypeId === undefined ? undefined : input.taskTypeId,
+          epicId: input.epicId === undefined ? undefined : input.epicId,
+          storyPoints: input.storyPoints === undefined ? undefined : input.storyPoints,
+          sprintId: input.sprintId === undefined ? undefined : input.sprintId,
           domainEntityId:
             hostLink === undefined
               ? input.domainEntityId === undefined
@@ -459,7 +591,7 @@ export class TasksService {
     }
     const task = await this.prisma.task.findFirstOrThrow({
       where: { id: taskId, deletedAt: null },
-      include: { list: true },
+      include: { list: true, assignees: true },
     });
 
     const targetListId = input.listId ?? task.listId;
@@ -472,7 +604,14 @@ export class TasksService {
           throw AppError.forbidden();
         }
       }
-      const allowedKeys = ['status', 'listStatusId', 'afterTaskId', 'position'] as const;
+      const allowedKeys = [
+        'status',
+        'listStatusId',
+        'afterTaskId',
+        'position',
+        'rankBeforeId',
+        'rankAfterId',
+      ] as const;
       const keys = Object.keys(input).filter((key) => input[key as keyof MoveInput] !== undefined);
       const forbidden = keys.filter((key) => !allowedKeys.includes(key as (typeof allowedKeys)[number]));
       if (forbidden.length > 0 || (keys.includes('listId') && listChanged)) {
@@ -491,11 +630,19 @@ export class TasksService {
     }
 
     const columns = await this.statuses.resolveForList(targetListId);
-    const synced = this.syncDualStatus(
+    const synced = resolveDualStatus(
       { status: task.status, listStatusId: task.listStatusId, completedAt: task.completedAt },
       columns,
       { status: input.status, listStatusId: input.listStatusId },
     );
+    const nextDue =
+      input.dueDate === undefined ? (task.dueDate ? task.dueDate.toISOString() : null) : input.dueDate;
+    if (input.assigneeIds || input.dueDate !== undefined || synced.changed) {
+      const assigneeIds = input.assigneeIds ?? task.assignees?.map((row) => row.userId) ?? [];
+      assertDelegationHasDue(user.id, assigneeIds, nextDue, {
+        preparing: isBacklogColumn(columns, synced.listStatusId),
+      });
+    }
     const reviewPatch = this.resolveReviewTransition({
       task,
       columns,
@@ -511,6 +658,76 @@ export class TasksService {
         position = input.position;
       } else if (input.afterTaskId !== undefined || listChanged) {
         position = await this.resolvePositionInTx(tx, targetListId, taskId, input.afterTaskId ?? null);
+      }
+      let rank: string | undefined;
+      if (input.rankBeforeId != null || input.rankAfterId != null) {
+        rank = await this.identity.rankBetweenTasks(
+          tx,
+          input.rankBeforeId ?? null,
+          input.rankAfterId ?? null,
+        );
+      }
+      let key: string | undefined;
+      if (listChanged) {
+        const targetList = await tx.taskList.findUniqueOrThrow({
+          where: { id: targetListId },
+          select: { spaceId: true },
+        });
+        if (targetList.spaceId !== task.list.spaceId) {
+          key = await this.identity.nextKey(tx, targetList.spaceId);
+          await tx.task.update({ where: { id: taskId }, data: { key } });
+          await this.identity.rememberKey(tx, taskId, task.key);
+        }
+      }
+      const statusAt = synced.changed
+        ? await this.taskStatus.commit(tx, {
+            taskId,
+            before: {
+              status: task.status,
+              listStatusId: task.listStatusId,
+              completedAt: task.completedAt,
+            },
+            after: synced,
+            columns,
+            actorUserId: user.id,
+            reason: StatusReason.MOVE,
+            sprintId: task.sprintId,
+            storyPoints: task.storyPoints,
+          })
+        : undefined;
+      if (input.assigneeIds) {
+        await tx.taskAssignee.deleteMany({ where: { taskId } });
+        if (input.assigneeIds.length > 0) {
+          await tx.taskAssignee.createMany({
+            data: input.assigneeIds.map((assigneeId) => ({ taskId, userId: assigneeId })),
+            skipDuplicates: true,
+          });
+        }
+      }
+      const nextDueDate =
+        input.dueDate === undefined ? undefined : input.dueDate ? new Date(input.dueDate) : null;
+      let dueMoveIncrement = 0;
+      if (nextDueDate !== undefined && (task.dueDate?.getTime() ?? null) !== (nextDueDate?.getTime() ?? null)) {
+        await tx.taskActivity.create({
+          data: {
+            taskId,
+            userId: user.id,
+            action: 'DUE_DATE_CHANGED',
+            details: {
+              from: task.dueDate?.toISOString() ?? null,
+              to: nextDueDate?.toISOString() ?? null,
+            },
+          },
+        });
+        if (task.dueDate != null) dueMoveIncrement = 1;
+      }
+      if (input.epicId) {
+        await this.assertEpicTarget(tx, {
+          taskId,
+          listId: targetListId,
+          taskTypeId: task.taskTypeId,
+          epicId: input.epicId,
+        });
       }
 
       if (reviewPatch.rejectActivity) {
@@ -533,6 +750,16 @@ export class TasksService {
           completedAt: synced.completedAt,
           submittedAt: reviewPatch.submittedAt,
           position,
+          rank,
+          key,
+          statusChangedAt: statusAt,
+          priority: input.priority,
+          epicId: input.epicId,
+          dueDate: nextDueDate,
+          ...(dueMoveIncrement ? { dueDateMoveCount: { increment: dueMoveIncrement } } : {}),
+          ...(input.hostEntityId !== undefined
+            ? await this.hostPatch(input.hostEntityId)
+            : {}),
         },
         include: { assignees: true },
       });
@@ -561,7 +788,7 @@ export class TasksService {
       await this.taskAccess.assertCanManageTask(user, taskId);
       const task = await this.prisma.task.findFirstOrThrow({ where: { id: taskId, deletedAt: null } });
       const columns = await this.statuses.resolveForList(task.listId);
-      const synced = this.syncDualStatus(task, columns, {
+      const synced = resolveDualStatus(task, columns, {
         status: input.status,
         listStatusId: input.listStatusId,
       });
@@ -575,12 +802,29 @@ export class TasksService {
             });
           }
         }
+        const statusAt = synced.changed
+          ? await this.taskStatus.commit(tx, {
+              taskId,
+              before: {
+                status: task.status,
+                listStatusId: task.listStatusId,
+                completedAt: task.completedAt,
+              },
+              after: synced,
+              columns,
+              actorUserId: user.id,
+              reason: StatusReason.BULK,
+              sprintId: task.sprintId,
+              storyPoints: task.storyPoints,
+            })
+          : undefined;
         return tx.task.update({
           where: { id: taskId },
           data: {
             status: synced.status,
             listStatusId: synced.listStatusId,
             completedAt: synced.completedAt,
+            statusChangedAt: statusAt,
             priority: input.priority,
           },
           include: { assignees: true },
@@ -678,34 +922,85 @@ export class TasksService {
     });
   }
 
-  private syncDualStatus(
-    task: { status: TaskStatus; listStatusId: string | null; completedAt: Date | null },
-    columns: Array<{ id: string; category: TaskStatus; isDefault: boolean }>,
-    input: { status?: TaskStatus; listStatusId?: string },
-  ) {
-    let status = task.status;
-    let listStatusId = task.listStatusId;
-    let completedAt = task.completedAt;
+  private async hostPatch(hostEntityId: string | null) {
+    if (hostEntityId === null) {
+      return {
+        hostEntityId: null,
+        domainEntityId: null,
+        domainEntityType: null,
+        domainLabel: null,
+      };
+    }
+    const hostLink = await this.resolveHostEntityLink(hostEntityId);
+    if (!hostLink) {
+      throw AppError.notFound('Сущность не найдена');
+    }
+    return {
+      hostEntityId: hostLink.id,
+      domainEntityType: hostLink.entityType,
+      domainEntityId: hostLink.id,
+      domainLabel: hostLink.name,
+    };
+  }
 
-    if (input.listStatusId) {
-      const column = columns.find((item) => item.id === input.listStatusId);
-      if (!column) {
-        throw AppError.notFound('Статус списка не найден');
+  private async replaceLabels(tx: Prisma.TransactionClient, taskId: string, labelIds: string[]) {
+    const unique = [...new Set(labelIds)];
+    if (unique.length > 0) {
+      const found = await tx.label.count({ where: { id: { in: unique } } });
+      if (found !== unique.length) {
+        throw AppError.badRequest('Метка не найдена');
       }
-      listStatusId = column.id;
-      status = column.category;
-    } else if (input.status) {
-      status = input.status;
-      listStatusId = this.statuses.defaultForCategory(columns, input.status)?.id ?? listStatusId;
     }
-
-    if (status === TaskStatus.DONE && task.status !== TaskStatus.DONE) {
-      completedAt = new Date();
-    } else if (status !== TaskStatus.DONE) {
-      completedAt = null;
+    await tx.taskLabel.deleteMany({ where: { taskId } });
+    if (unique.length > 0) {
+      await tx.taskLabel.createMany({
+        data: unique.map((labelId) => ({ taskId, labelId })),
+        skipDuplicates: true,
+      });
     }
+  }
 
-    return { status, listStatusId, completedAt };
+  private async assertEpicTarget(
+    tx: Prisma.TransactionClient,
+    input: { taskId: string | null; listId: string; taskTypeId: string | null; epicId: string | null },
+  ) {
+    if (!input.epicId) return;
+    if (input.taskId && input.epicId === input.taskId) {
+      throw new AppError(ErrorCode.EPIC_INVALID, 'Задача не может быть эпиком самой себя', HttpStatus.BAD_REQUEST);
+    }
+    await this.assertNotNestingEpic(tx, input.taskId, input.taskTypeId, input.epicId);
+    const epic = await tx.task.findFirst({
+      where: { id: input.epicId, deletedAt: null },
+      include: { taskType: true, list: { select: { spaceId: true } } },
+    });
+    if (!epic || epic.taskType?.key !== EPIC_TYPE_KEY) {
+      throw new AppError(ErrorCode.EPIC_INVALID, 'Эпик не найден', HttpStatus.BAD_REQUEST);
+    }
+    const list = await tx.taskList.findUnique({ where: { id: input.listId }, select: { spaceId: true } });
+    if (!list || list.spaceId !== epic.list.spaceId) {
+      throw new AppError(ErrorCode.EPIC_INVALID, 'Эпик из другого пространства', HttpStatus.BAD_REQUEST);
+    }
+  }
+
+  private async assertNotNestingEpic(
+    tx: Prisma.TransactionClient,
+    taskId: string | null,
+    taskTypeId: string | null,
+    epicId: string | null,
+  ) {
+    if (!epicId || !taskTypeId) return;
+    const type = await tx.taskType.findUnique({ where: { id: taskTypeId }, select: { key: true } });
+    if (type?.key === EPIC_TYPE_KEY) {
+      throw new AppError(ErrorCode.EPIC_INVALID, 'Эпик не вкладывается в эпик', HttpStatus.BAD_REQUEST);
+    }
+    if (taskId) {
+      const childEpic = await tx.task.count({
+        where: { epicId: taskId, deletedAt: null },
+      });
+      if (childEpic > 0 && type?.key === EPIC_TYPE_KEY) {
+        throw new AppError(ErrorCode.EPIC_INVALID, 'Эпик не вкладывается в эпик', HttpStatus.BAD_REQUEST);
+      }
+    }
   }
 
   private async resolvePositionInTx(
@@ -818,4 +1113,17 @@ export class TasksService {
       include: { assignees: true },
     });
   }
+}
+
+function assertStoryPoints(value: number | null | undefined): void {
+  if (value == null) return;
+  if (!Number.isFinite(value) || value < 0 || value > STORY_POINTS_MAX) {
+    throw AppError.badRequest('Оценка вне диапазона 0..999.9');
+  }
+}
+
+function samePoints(previous: Prisma.Decimal | null, next: number | null): boolean {
+  if (previous == null && next == null) return true;
+  if (previous == null || next == null) return false;
+  return Number(previous) === next;
 }

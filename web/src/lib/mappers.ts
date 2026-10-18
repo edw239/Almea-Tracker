@@ -87,6 +87,12 @@ export type ApiTask = {
   stuckAt?: string | null
   stuckReason?: string | null
   dueDateMoveCount?: number
+  key?: string
+  rank?: string
+  epicId?: string | null
+  storyPoints?: number | string | null
+  sprintId?: string | null
+  labels?: Array<{ label: { id: string; name: string } }>
   list?: { id: string; name: string; spaceId: string }
   _count?: { children?: number }
 }
@@ -172,6 +178,13 @@ export function mapApiTask(row: ApiTask): Task {
     stuckAt: row.stuckAt ?? null,
     stuckReason: row.stuckReason ?? null,
     dueDateMoveCount: row.dueDateMoveCount ?? 0,
+    key: row.key,
+    rank: row.rank,
+    epicId: row.epicId ?? null,
+    storyPoints: row.storyPoints == null ? null : Number(row.storyPoints),
+    sprintId: row.sprintId ?? null,
+    subtaskCount: row._count?.children ?? 0,
+    labels: row.labels?.map((item) => ({ id: item.label.id, name: item.label.name })),
   }
 }
 

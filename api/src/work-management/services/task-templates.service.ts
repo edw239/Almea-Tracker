@@ -12,6 +12,9 @@ import { TaskSpaceAccessService } from '../access/task-space-access.service';
 import { nextPosition } from '../utils/task-position.util';
 import { parseTemplateItems, type TemplateItem } from '../utils/task-template.util';
 import { TaskListStatusesService } from './task-list-statuses.service';
+import { TaskIdentityService } from './task-identity.service';
+import { TaskStatusService } from './task-status.service';
+import { StatusReason } from '../utils/task-status.util';
 
 @Injectable()
 export class TaskTemplatesService {
@@ -19,6 +22,8 @@ export class TaskTemplatesService {
     private readonly prisma: PrismaService,
     private readonly spaces: TaskSpaceAccessService,
     private readonly statuses: TaskListStatusesService,
+    private readonly identity: TaskIdentityService,
+    private readonly taskStatus: TaskStatusService,
   ) {}
 
   async listForList(user: AuthUser, listId: string) {
@@ -179,7 +184,14 @@ export class TaskTemplatesService {
     },
   ) {
     const title = input.item.title.trim().slice(0, TITLE_MAX_LENGTH);
-    return tx.task.create({
+    const list = await tx.taskList.findUniqueOrThrow({
+      where: { id: input.listId },
+      select: { spaceId: true },
+    });
+    const key = await this.identity.nextKey(tx, list.spaceId);
+    const rank = await this.identity.nextRank(tx);
+    const at = new Date();
+    const created = await tx.task.create({
       data: {
         listId: input.listId,
         parentTaskId: input.parentTaskId,
@@ -192,6 +204,9 @@ export class TaskTemplatesService {
         priority: input.item.priority ?? TaskPriority.MEDIUM,
         dueDate: input.parentTaskId ? null : input.dueDate,
         position: input.position,
+        key,
+        rank,
+        statusChangedAt: at,
         assignees: { create: { userId: input.assigneeUserId } },
         checklist: input.item.checklist?.length
           ? {
@@ -204,5 +219,19 @@ export class TaskTemplatesService {
       },
       include: { assignees: true, checklist: true },
     });
+    await this.taskStatus.commit(tx, {
+      taskId: created.id,
+      before: null,
+      after: {
+        status: TaskStatus.OPEN,
+        listStatusId: input.listStatusId,
+        completedAt: null,
+      },
+      columns: [],
+      actorUserId: input.actorUserId,
+      reason: StatusReason.CREATE,
+      at,
+    });
+    return created;
   }
 }

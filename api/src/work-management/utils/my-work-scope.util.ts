@@ -41,6 +41,11 @@ export function buildMyWorkWhere(userId: string, scope: MyWorkScope): Prisma.Tas
   const base: Prisma.TaskWhereInput = {
     deletedAt: null,
     parentTaskId: null,
+    AND: [
+      {
+        OR: [{ listStatusId: null }, { listStatus: { isBacklog: false } }],
+      },
+    ],
   };
 
   switch (scope) {

@@ -14,6 +14,8 @@ import { TaskSpacesService } from './services/task-spaces.service';
 import { TaskTemplatesService } from './services/task-templates.service';
 import { TaskSchedulesService } from './services/task-schedules.service';
 import { TasksService } from './services/tasks.service';
+import { TaskIdentityService } from './services/task-identity.service';
+import { TaskStatusService } from './services/task-status.service';
 import { TaskViewsService } from './services/task-views.service';
 import { WorkSchedulerService } from './services/work-scheduler.service';
 import { ColleagueController } from './colleague.controller';
@@ -24,7 +26,13 @@ import { TaskSpacesController } from './task-spaces.controller';
 import { TaskTemplatesController } from './task-templates.controller';
 import { TaskSchedulesController } from './task-schedules.controller';
 import { TaskListStatusesController } from './task-list-statuses.controller';
-import { TaskTypesController } from './task-types.controller';
+import { TaskTypeItemController, TaskTypesController } from './task-types.controller';
+import { BoardsController, LabelsController } from './boards/boards.controller';
+import { BoardAccessService } from './boards/board-access.service';
+import { BoardsService } from './boards/boards.service';
+import { SprintsService } from './boards/sprints.service';
+import { BoardReportsService } from './boards/board-reports.service';
+import { LabelsService } from './services/labels.service';
 import { TaskListStatusesAdminService } from './services/task-list-statuses-admin.service';
 import { TaskTypesService } from './services/task-types.service';
 import { TasksController } from './tasks.controller';
@@ -45,6 +53,9 @@ import { OverviewService } from './services/overview.service';
     TaskSchedulesController,
     TaskListStatusesController,
     TaskTypesController,
+    TaskTypeItemController,
+    BoardsController,
+    LabelsController,
     ColleagueController,
     HostEntitiesController,
     OverviewController,
@@ -57,6 +68,8 @@ import { OverviewService } from './services/overview.service';
     TaskSpacesService,
     TaskNotificationsService,
     TaskCollabService,
+    TaskIdentityService,
+    TaskStatusService,
     TasksService,
     TaskViewsService,
     TaskHostService,
@@ -64,6 +77,11 @@ import { OverviewService } from './services/overview.service';
     TaskSchedulesService,
     TaskListStatusesAdminService,
     TaskTypesService,
+    LabelsService,
+    BoardAccessService,
+    SprintsService,
+    BoardsService,
+    BoardReportsService,
     WorkSchedulerService,
     ColleagueService,
     HostEntitiesService,

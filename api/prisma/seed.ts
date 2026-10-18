@@ -54,6 +54,7 @@ async function main() {
       description: 'System space. Личные задачи без доменной сущности.',
       isSystem: true,
       systemKey: SYSTEM_SPACE_PERSONAL,
+      key: 'ME',
     },
   });
   await seedStatuses(personal.id, null);
@@ -77,6 +78,7 @@ async function main() {
       name: 'Операции',
       description: 'Компания, лаборатория, фабрика.',
       systemKey: 'ops',
+      key: 'OPS',
     },
   });
   await prisma.taskSpaceMember.upsert({
@@ -114,6 +116,7 @@ async function main() {
       description: 'System space для entity-lists.',
       isSystem: true,
       systemKey: 'host',
+      key: 'BR',
     },
   });
 
@@ -139,6 +142,9 @@ async function main() {
         listStatusId: inboxInProgress?.id ?? null,
         priority: TaskPriority.HIGH,
         position: POSITION_STEP,
+        key: 'ME-1',
+        rank: 'U00000001',
+        statusChangedAt: new Date(),
         assignees: { create: { userId: user.id } },
       },
     });
@@ -152,6 +158,9 @@ async function main() {
         listStatusId: strategyInProgress?.id ?? null,
         priority: TaskPriority.URGENT,
         position: POSITION_STEP,
+        key: 'OPS-1',
+        rank: 'U00000002',
+        statusChangedAt: new Date(),
         domainEntityType: 'brand',
         domainEntityId: xlash.id,
         domainLabel: 'XLASH',
@@ -159,6 +168,8 @@ async function main() {
         assignees: { create: { userId: user.id } },
       },
     });
+    await prisma.taskSpace.update({ where: { id: personal.id }, data: { taskSeq: 1 } });
+    await prisma.taskSpace.update({ where: { id: ops.id }, data: { taskSeq: 1 } });
   } else {
     await prisma.task.updateMany({
       where: {

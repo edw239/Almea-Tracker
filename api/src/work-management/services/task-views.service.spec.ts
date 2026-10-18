@@ -19,7 +19,7 @@ describe('TaskViewsService.createView', () => {
     };
     const service = new TaskViewsService(prisma as never, spaces as never);
     await service.createView(
-      { id: 'u1', role: UserRole.MEMBER, email: 'a@b.c' },
+      { id: 'u1', role: UserRole.MEMBER, email: 'a@b.c', name: 'A', mustChangePassword: false },
       {
         listId: 'list-1',
         name: 'My board',
@@ -49,7 +49,7 @@ describe('TaskViewsService.createView', () => {
     const service = new TaskViewsService(prisma as never, spaces as never);
     await expect(
       service.createView(
-        { id: 'u1', role: UserRole.MEMBER, email: 'a@b.c' },
+        { id: 'u1', role: UserRole.MEMBER, email: 'a@b.c', name: 'A', mustChangePassword: false },
         { listId: 'list-1', name: 'Shared', viewType: TaskViewType.LIST, isShared: true },
       ),
     ).rejects.toThrow('forbidden');

@@ -5,6 +5,7 @@ describe('TaskTemplatesService.expandIntoList', () => {
   it('creates root tasks and subtasks in a transaction', async () => {
     const created: Array<{ id: string; title: string }> = [];
     const tx = {
+      taskList: { findUniqueOrThrow: jest.fn().mockResolvedValue({ spaceId: 'space-1' }) },
       task: {
         create: jest.fn(async ({ data }: { data: { title: string; parentTaskId: string | null } }) => {
           const row = { id: `t-${created.length + 1}`, title: data.title, parentTaskId: data.parentTaskId };
@@ -50,9 +51,20 @@ describe('TaskTemplatesService.expandIntoList', () => {
       resolveForList: jest.fn().mockResolvedValue([{ id: 'st-open', category: TaskStatus.OPEN }]),
       defaultForCategory: jest.fn().mockReturnValue({ id: 'st-open' }),
     };
-    const service = new TaskTemplatesService(prisma as never, spaces as never, statuses as never);
+    const identity = {
+      nextKey: jest.fn().mockResolvedValue('OPS-1'),
+      nextRank: jest.fn().mockResolvedValue('V'),
+    };
+    const taskStatus = { commit: jest.fn().mockResolvedValue(new Date()) };
+    const service = new TaskTemplatesService(
+      prisma as never,
+      spaces as never,
+      statuses as never,
+      identity as never,
+      taskStatus as never,
+    );
     const result = await service.expandIntoList(
-      { id: 'u1', role: UserRole.MEMBER, email: 'a@b.c' },
+      { id: 'u1', role: UserRole.MEMBER, email: 'a@b.c', name: 'A', mustChangePassword: false },
       'list-1',
       'tpl-1',
     );

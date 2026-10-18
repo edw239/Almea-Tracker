@@ -74,6 +74,12 @@ export const NAV_SECTIONS: NavSection[] = [
     label: 'Компания',
     items: [
       {
+        to: '/boards',
+        label: 'Доски',
+        icon: LayoutGrid,
+        roles: [],
+      },
+      {
         to: '/brands',
         label: 'Бренды',
         icon: Building2,

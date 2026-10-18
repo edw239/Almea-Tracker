@@ -17,8 +17,7 @@ import { dueLabel, isOverdue } from '../lib/format'
 import { columnDropId, parseColumnDropId } from '../lib/mechanics'
 import { cn } from '../lib/utils'
 import { useStore } from '../store'
-import { BADGE_BASE } from '../lib/control-styles'
-import { Avatars } from './ui'
+import { IssueCardFace } from './board/IssueCard'
 
 const collisionDetection: CollisionDetection = (args) => {
   const pointer = pointerWithin(args)
@@ -126,22 +125,21 @@ function BoardCard({
       {...listeners}
       {...attributes}
     >
-      <strong className="block text-sm font-medium text-foreground">{task.title}</strong>
-      <p className="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-        {task.domainLabel ? <span className={BADGE_BASE}>{task.domainLabel}</span> : null}
-        {due ? (
-          <span
-            className={cn(
-              BADGE_BASE,
-              overdue && 'bg-[var(--danger-soft)] text-destructive',
-              !overdue && due === 'сегодня' && 'bg-accent text-accent-foreground',
-            )}
-          >
-            {due}
-          </span>
-        ) : null}
-        <Avatars ids={task.assigneeIds} />
-      </p>
+      <IssueCardFace
+        face={{
+          key: task.key,
+          title: task.title,
+          priority: task.priority,
+          domainLabel: task.domainLabel,
+          storyPoints: task.storyPoints,
+          labels: task.labels,
+          isStuck: task.isStuck,
+          subtaskLabel: (task.subtaskCount ?? 0) > 0 ? String(task.subtaskCount) : null,
+          assigneeIds: task.assigneeIds,
+          dueText: due,
+          dueTone: overdue ? 'overdue' : due === 'сегодня' ? 'today' : null,
+        }}
+      />
     </button>
   )
 }

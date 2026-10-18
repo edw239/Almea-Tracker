@@ -8,6 +8,15 @@ export const FILTER_FIELDS = [
   'due_date',
   'title',
   'list_status_id',
+  'task_type_id',
+  'host_entity_id',
+  'list_id',
+  'updated_at',
+  'key',
+  'epic_id',
+  'label_id',
+  'story_points',
+  'sprint_id',
 ] as const;
 
 export type FilterField = (typeof FILTER_FIELDS)[number];
@@ -43,6 +52,15 @@ const FIELD_OPS: Record<FilterField, FilterOperator[]> = {
   assignee_id: ['is', 'is_not', 'is_set', 'is_not_set'],
   title: ['contains'],
   due_date: ['is_set', 'is_not_set', 'gt', 'lt', 'between'],
+  task_type_id: ['is', 'is_not', 'is_set', 'is_not_set'],
+  host_entity_id: ['is', 'is_not', 'is_set', 'is_not_set'],
+  list_id: ['is', 'is_not'],
+  updated_at: ['is_set', 'is_not_set', 'gt', 'lt', 'between'],
+  key: ['is'],
+  epic_id: ['is', 'is_not', 'is_set', 'is_not_set'],
+  label_id: ['is', 'is_not'],
+  story_points: ['is', 'gt', 'lt', 'is_set', 'is_not_set'],
+  sprint_id: ['is', 'is_not', 'is_set', 'is_not_set'],
 };
 
 function isGroup(node: FilterCondition | FilterGroup): node is FilterGroup {
@@ -121,6 +139,31 @@ export function filtersToPrisma(group: FilterGroup): Record<string, unknown> {
   return group.op === 'AND' ? { AND: parts } : { OR: parts };
 }
 
+function dateCondition(field: 'dueDate' | 'updatedAt', condition: FilterCondition): Record<string, unknown> {
+  if (condition.operator === 'is_set') return { [field]: { not: null } };
+  if (condition.operator === 'is_not_set') return { [field]: null };
+  if (condition.operator === 'gt') return { [field]: { gt: new Date(String(condition.value)) } };
+  if (condition.operator === 'lt') return { [field]: { lt: new Date(String(condition.value)) } };
+  if (condition.operator === 'between' && Array.isArray(condition.value) && condition.value.length === 2) {
+    return {
+      [field]: {
+        gte: new Date(String(condition.value[0])),
+        lte: new Date(String(condition.value[1])),
+      },
+    };
+  }
+  throw AppError.badRequest(`Невалидный ${field} filter`);
+}
+
+function idCondition(
+  field: 'taskTypeId' | 'hostEntityId' | 'epicId' | 'sprintId',
+  condition: FilterCondition,
+): Record<string, unknown> {
+  if (condition.operator === 'is_set') return { [field]: { not: null } };
+  if (condition.operator === 'is_not_set') return { [field]: null };
+  return condition.operator === 'is' ? { [field]: condition.value } : { [field]: { not: condition.value } };
+}
+
 function conditionToPrisma(condition: FilterCondition): Record<string, unknown> {
   switch (condition.field) {
     case 'status':
@@ -143,19 +186,34 @@ function conditionToPrisma(condition: FilterCondition): Record<string, unknown> 
     case 'title':
       return { title: { contains: String(condition.value ?? ''), mode: 'insensitive' } };
     case 'due_date':
-      if (condition.operator === 'is_set') return { dueDate: { not: null } };
-      if (condition.operator === 'is_not_set') return { dueDate: null };
-      if (condition.operator === 'gt') return { dueDate: { gt: new Date(String(condition.value)) } };
-      if (condition.operator === 'lt') return { dueDate: { lt: new Date(String(condition.value)) } };
-      if (condition.operator === 'between' && Array.isArray(condition.value) && condition.value.length === 2) {
-        return {
-          dueDate: {
-            gte: new Date(String(condition.value[0])),
-            lte: new Date(String(condition.value[1])),
-          },
-        };
-      }
-      throw AppError.badRequest('Невалидный due_date filter');
+      return dateCondition('dueDate', condition);
+    case 'updated_at':
+      return dateCondition('updatedAt', condition);
+    case 'task_type_id':
+      return idCondition('taskTypeId', condition);
+    case 'host_entity_id':
+      return idCondition('hostEntityId', condition);
+    case 'epic_id':
+      return idCondition('epicId', condition);
+    case 'sprint_id':
+      return idCondition('sprintId', condition);
+    case 'list_id':
+      return condition.operator === 'is'
+        ? { listId: condition.value }
+        : { listId: { not: condition.value } };
+    case 'key':
+      return { key: String(condition.value ?? '') };
+    case 'label_id':
+      return condition.operator === 'is'
+        ? { labels: { some: { labelId: condition.value } } }
+        : { labels: { none: { labelId: condition.value } } };
+    case 'story_points':
+      if (condition.operator === 'is_set') return { storyPoints: { not: null } };
+      if (condition.operator === 'is_not_set') return { storyPoints: null };
+      if (condition.operator === 'is') return { storyPoints: condition.value };
+      if (condition.operator === 'gt') return { storyPoints: { gt: condition.value } };
+      if (condition.operator === 'lt') return { storyPoints: { lt: condition.value } };
+      throw AppError.badRequest('Невалидный story_points filter');
     default:
       throw AppError.badRequest('Неизвестное поле');
   }

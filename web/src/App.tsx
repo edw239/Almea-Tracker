@@ -11,6 +11,12 @@ import { BrandsPage } from './pages/BrandsPage'
 import { HostEntityPage } from './pages/HostEntityPage'
 import { InboxPage } from './pages/InboxPage'
 import { ListPage } from './pages/ListPage'
+import { BoardsPage } from './pages/boards/BoardsPage'
+import { BoardPage } from './pages/boards/BoardPage'
+import { BoardSettingsPage } from './pages/boards/BoardSettingsPage'
+import { BoardBacklogPage } from './pages/boards/BoardBacklogPage'
+import { BoardReportsPage } from './pages/boards/BoardReportsPage'
+import { BrowsePage } from './pages/BrowsePage'
 import { LoginPage } from './pages/LoginPage'
 import { ForcePasswordChangePage } from './pages/ForcePasswordChangePage'
 import { MePage } from './pages/MePage'
@@ -66,6 +72,12 @@ export default function App() {
                   <Route path="/favorites" element={<FavoritesPage />} />
                   <Route path="/spaces/:spaceId" element={<SpacePage />} />
                   <Route path="/lists/:listId" element={<ListPage />} />
+                  <Route path="/boards" element={<BoardsPage />} />
+                  <Route path="/boards/:boardId" element={<BoardPage />} />
+                  <Route path="/boards/:boardId/settings" element={<BoardSettingsPage />} />
+                  <Route path="/boards/:boardId/backlog" element={<BoardBacklogPage />} />
+                  <Route path="/boards/:boardId/reports" element={<BoardReportsPage />} />
+                  <Route path="/browse/:key" element={<BrowsePage />} />
                   <Route path="/tasks/:taskId" element={<TaskPage />} />
                   <Route path="/host/:entityType/:entityId" element={<HostEntityPage />} />
                   <Route path="*" element={<Navigate to="/" replace />} />

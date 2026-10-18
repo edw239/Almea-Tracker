@@ -91,7 +91,9 @@ const canRun =
     const newbie = request.agent(app.getHttpServer());
     const login = await newbie.post('/api/auth/login').send({ email, password: temp }).expect(201);
     expect(login.body.user.mustChangePassword).toBe(true);
-    expect(login.headers['set-cookie']?.join(';') ?? '').toContain(AUTH_COOKIE_NAME);
+    const setCookie = login.headers['set-cookie'];
+    const cookieHeader = Array.isArray(setCookie) ? setCookie.join(';') : String(setCookie ?? '');
+    expect(cookieHeader).toContain(AUTH_COOKIE_NAME);
 
     const blocked = await newbie.get('/api/tasks').expect(403);
     expect(blocked.body.code).toBe('MUST_CHANGE_PASSWORD');

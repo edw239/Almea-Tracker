@@ -20,6 +20,9 @@ import { computeNextRunAt, schedulePeriodKey } from '../utils/schedule-timing.ut
 import { nextPosition } from '../utils/task-position.util';
 import { TaskListStatusesService } from './task-list-statuses.service';
 import { TaskTemplatesService } from './task-templates.service';
+import { TaskIdentityService } from './task-identity.service';
+import { TaskStatusService } from './task-status.service';
+import { StatusReason } from '../utils/task-status.util';
 
 export type CreateScheduleInput = {
   title: string;
@@ -53,6 +56,8 @@ export class TaskSchedulesService {
     private readonly spaces: TaskSpaceAccessService,
     private readonly statuses: TaskListStatusesService,
     private readonly templates: TaskTemplatesService,
+    private readonly identity: TaskIdentityService,
+    private readonly taskStatus: TaskStatusService,
   ) {}
 
   async listForList(user: AuthUser, listId: string) {
@@ -310,19 +315,37 @@ export class TaskSchedulesService {
       orderBy: { position: 'desc' },
     });
     const position = nextPosition(last?.position ?? 0);
-    const task = await this.prisma.task.create({
-      data: {
-        listId: schedule.listId,
-        ownerUserId: assigneeUserId,
-        createdByUserId: assigneeUserId,
-        title: schedule.title.slice(0, TITLE_MAX_LENGTH),
-        status: TaskStatus.OPEN,
-        listStatusId: open?.id ?? null,
-        priority: TaskPriority.MEDIUM,
-        dueDate,
-        position,
-        assignees: { create: { userId: assigneeUserId } },
-      },
+    const task = await this.prisma.$transaction(async (tx) => {
+      const key = await this.identity.nextKey(tx, list.spaceId);
+      const rank = await this.identity.nextRank(tx);
+      const at = new Date();
+      const created = await tx.task.create({
+        data: {
+          listId: schedule.listId,
+          ownerUserId: assigneeUserId,
+          createdByUserId: assigneeUserId,
+          title: schedule.title.slice(0, TITLE_MAX_LENGTH),
+          status: TaskStatus.OPEN,
+          listStatusId: open?.id ?? null,
+          priority: TaskPriority.MEDIUM,
+          dueDate,
+          position,
+          key,
+          rank,
+          statusChangedAt: at,
+          assignees: { create: { userId: assigneeUserId } },
+        },
+      });
+      await this.taskStatus.commit(tx, {
+        taskId: created.id,
+        before: null,
+        after: { status: TaskStatus.OPEN, listStatusId: open?.id ?? null, completedAt: null },
+        columns,
+        actorUserId: assigneeUserId,
+        reason: StatusReason.CREATE,
+        at,
+      });
+      return created;
     });
     return task.id;
   }

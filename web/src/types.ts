@@ -7,7 +7,7 @@ export type TaskPriority = (typeof TaskPriorities)[number]
 export const ViewTypes = ['LIST', 'BOARD', 'TABLE', 'CALENDAR'] as const
 export type ViewType = (typeof ViewTypes)[number]
 
-export const FavoriteEntityTypes = ['TASK_LIST', 'TASK', 'TASK_VIEW'] as const
+export const FavoriteEntityTypes = ['TASK_LIST', 'TASK', 'TASK_VIEW', 'BOARD'] as const
 export type FavoriteEntityType = (typeof FavoriteEntityTypes)[number]
 
 export const NotificationCodes = [
@@ -124,6 +124,13 @@ export type Task = {
   stuckAt?: string | null
   stuckReason?: string | null
   dueDateMoveCount?: number
+  key?: string
+  rank?: string
+  epicId?: string | null
+  storyPoints?: number | null
+  sprintId?: string | null
+  subtaskCount?: number
+  labels?: Array<{ id: string; name: string }>
 }
 
 export type Notification = {

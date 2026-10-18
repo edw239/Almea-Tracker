@@ -51,4 +51,26 @@ export function businessDaysAgo(now: Date, days: number, timeZone: string): Date
   return cursor;
 }
 
+/** Inclusive business-day keys (YYYY-MM-DD in `timeZone`), weekends skipped. */
+export function listBusinessDayKeys(start: Date, end: Date, timeZone: string): string[] {
+  const keys: string[] = [];
+  let cursor = startOfZonedDay(start, timeZone, 0);
+  const last = startOfZonedDay(end, timeZone, 0).getTime();
+  const format = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  });
+  let guard = 0;
+  while (cursor.getTime() <= last && guard < 400) {
+    if (!isWeekendInZone(cursor, timeZone)) {
+      keys.push(format.format(cursor));
+    }
+    cursor = startOfZonedDay(cursor, timeZone, 1);
+    guard += 1;
+  }
+  return keys;
+}
+
 export { weekdayInZone, isWeekendInZone };

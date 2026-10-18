@@ -49,7 +49,26 @@ export const DEFAULT_STATUSES = [
 /** List-column name for review submission (canonical status stays IN_PROGRESS). */
 export const LIST_STATUS_NAME_IN_REVIEW = 'На проверке';
 
-export const ASSIGNEE_ONLY_FIELDS = ['status', 'listStatusId', 'position'] as const;
+export const ASSIGNEE_ONLY_FIELDS = ['status', 'listStatusId', 'position', 'rank'] as const;
+
+export const SPACE_KEY_PATTERN = /^[A-Z][A-Z0-9]{1,9}$/;
+export const TASK_KEY_PATTERN = /^[A-Z][A-Z0-9]{1,9}-\d+$/;
+export const BACKLOG_STATUS_NAME = 'Бэклог';
+export const EPIC_TYPE_KEY = 'epic';
+
+export const BOARD_NAME_MAX_LENGTH = 120;
+export const BOARD_MAX_CARDS = 500;
+export const BOARD_DONE_HIDE_DAYS = 14;
+export const BOARD_REFRESH_MS = 30_000;
+export const BOARD_CARD_FIELDS_MAX = 3;
+export const BOARD_RECENT_HOURS = 24;
+export const LABEL_NAME_MAX_LENGTH = 40;
+export const STORY_POINTS_MAX = 999.9;
+export const SPRINT_DEFAULT_LENGTH_DAYS = 14;
+export const SPRINT_NAME_MAX_LENGTH = 120;
+export const VELOCITY_SPRINTS = 7;
+export const CYCLE_ROLLING_WINDOW = 10;
+export const REPORT_DEFAULT_DAYS = 30;
 
 export const FILTER_MAX_DEPTH = 3;
 export const FILTER_MAX_CONDITIONS = 20;
@@ -75,4 +94,13 @@ export const DEFAULT_TASK_TYPES = [
   { key: 'task', name: 'Задача', color: '#64748b', position: 0 },
   { key: 'milestone', name: 'Веха', color: '#8b5cf6', position: 1 },
   { key: 'approval', name: 'Согласование', color: '#d97706', position: 2 },
+  { key: 'epic', name: 'Эпик', color: '#7c3aed', position: 3 },
 ] as const;
+
+export const EPIC_COLORS = ['#3b82f6', '#8b5cf6', '#d97706', '#22c55e', '#ef4444', '#0891b2', '#db2777'] as const;
+
+export const KNOWN_SPACE_KEYS: Record<string, string> = {
+  ops: 'OPS',
+  personal: 'ME',
+  host: 'BR',
+};
