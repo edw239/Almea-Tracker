@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
-import { TaskSpaceMemberRole, UserRole } from '@prisma/client';
+import { TaskSpaceMemberRole } from '@prisma/client';
 import { AppError } from '../../common/errors';
+import { canManageTasks } from '../../identity/auth/user-role';
 import type { AuthUser } from '../../identity/auth/jwt.strategy';
 import { PrismaService } from '../../prisma/prisma.service';
 import { TaskSpaceAccessService } from './task-space-access.service';
@@ -18,7 +19,7 @@ export class TaskAccessService {
     const task = await this.prisma.task.findFirst({
       where: { id: taskId, deletedAt: null },
       include: {
-        list: { select: { id: true, spaceId: true } },
+        list: { select: { id: true, spaceId: true, space: { select: { isSystem: true } } } },
         assignees: { select: { userId: true } },
       },
     });
@@ -31,7 +32,7 @@ export class TaskAccessService {
 
   async resolveLevel(user: AuthUser, taskId: string): Promise<TaskAccessLevel> {
     const task = await this.getVisibleTask(user, taskId);
-    if (user.role === UserRole.GLOBAL_ADMIN) {
+    if (canManageTasks(user.role)) {
       return 'manage';
     }
     const member = await this.prisma.taskSpaceMember.findUnique({

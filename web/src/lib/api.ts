@@ -1,4 +1,5 @@
 import type { FavoriteEntityType, TaskPriority, TaskStatus, ViewType } from '../types'
+import type { AccountRole } from './account-role'
 import type { ApiListStatus, ApiSpace, ApiTask } from './mappers'
 
 const DEFAULT_TIMEOUT_MS = 15_000
@@ -7,7 +8,7 @@ export type AuthUser = {
   id: string
   email: string
   name: string
-  role: 'GLOBAL_ADMIN' | 'MEMBER'
+  role: AccountRole
   mustChangePassword: boolean
 }
 
@@ -35,7 +36,7 @@ export type MeProfile = {
   id: string
   email: string
   name: string
-  role: 'GLOBAL_ADMIN' | 'MEMBER'
+  role: AccountRole
   timezone: string
   locale: string
   jobTitle: string | null
@@ -160,7 +161,7 @@ export type DirectoryUser = {
   id: string
   email: string
   name: string
-  role: 'GLOBAL_ADMIN' | 'MEMBER'
+  role: AccountRole
   jobTitle: string | null
   isActive: boolean
 }
@@ -170,13 +171,13 @@ export type ProvisionedUser = DirectoryUser & { temporaryPassword: string }
 export type CreateUserBody = {
   email: string
   name: string
-  role?: 'GLOBAL_ADMIN' | 'MEMBER'
+  role?: AccountRole
   jobTitle?: string | null
 }
 
 export type UpdateUserBody = {
   name?: string
-  role?: 'GLOBAL_ADMIN' | 'MEMBER'
+  role?: AccountRole
   jobTitle?: string | null
   isActive?: boolean
 }

@@ -1,7 +1,8 @@
 import { Injectable } from '@nestjs/common';
-import { TaskSpaceMemberRole, UserRole } from '@prisma/client';
+import { TaskSpaceMemberRole } from '@prisma/client';
 import { SYSTEM_LIST_PERSONAL_INBOX, SYSTEM_SPACE_PERSONAL } from '../../common/constants';
 import { AppError } from '../../common/errors';
+import { bypassesSpaceMembership, hasCompanyWorkScope } from '../../identity/auth/user-role';
 import type { AuthUser } from '../../identity/auth/jwt.strategy';
 import { PrismaService } from '../../prisma/prisma.service';
 
@@ -23,7 +24,7 @@ export class TaskSpaceAccessService {
     if (!space || space.isArchived) {
       throw AppError.notFound();
     }
-    if (user.role === UserRole.GLOBAL_ADMIN || space.isSystem) {
+    if (hasCompanyWorkScope(user.role) || space.isSystem) {
       return space;
     }
     const member = await this.prisma.taskSpaceMember.findUnique({
@@ -37,7 +38,7 @@ export class TaskSpaceAccessService {
 
   async assertCanManageSpace(user: AuthUser, spaceId: string): Promise<SpaceRecord> {
     const space = await this.getVisibleSpace(user, spaceId);
-    if (user.role === UserRole.GLOBAL_ADMIN) {
+    if (bypassesSpaceMembership(user.role, space.isSystem)) {
       return space;
     }
     if (space.isSystem) {
@@ -53,7 +54,7 @@ export class TaskSpaceAccessService {
   }
 
   async listVisibleSpaceIds(user: AuthUser): Promise<string[] | 'all'> {
-    if (user.role === UserRole.GLOBAL_ADMIN) {
+    if (hasCompanyWorkScope(user.role)) {
       return 'all';
     }
     const memberships = await this.prisma.taskSpaceMember.findMany({
@@ -64,8 +65,9 @@ export class TaskSpaceAccessService {
   }
 
   /**
-   * Creating a task in personal-inbox is allowed for any authenticated user.
-   * Managing the system list itself remains admin-only via assertCanManageSpace.
+   * Personal inbox is open to every signed-in user.
+   * A project manager can also create in host lists: those lists sit in a system space.
+   * Reshaping that space stays admin-only via assertCanManageSpace.
    */
   async assertCanCreateTaskInList(
     user: AuthUser,
@@ -75,6 +77,9 @@ export class TaskSpaceAccessService {
       throw AppError.notFound();
     }
     const space = await this.getVisibleSpace(user, list.spaceId);
+    if (hasCompanyWorkScope(user.role)) {
+      return;
+    }
     if (list.systemKey === SYSTEM_LIST_PERSONAL_INBOX && space.isSystem) {
       const personal = await this.prisma.taskSpace.findFirst({
         where: { id: list.spaceId, systemKey: SYSTEM_SPACE_PERSONAL, isSystem: true },

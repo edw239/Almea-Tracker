@@ -1,7 +1,12 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../auth'
+import { LoadErrorNotice } from '../components/LoadErrorNotice'
+import { PageHeader } from '../components/PageHeader'
 import { Select } from '../components/Select'
+import { CardSkeleton } from '../components/ui/Skeleton'
+import { Tabs } from '../components/ui/tabs'
+import { ACCOUNT_ROLE_LABEL } from '../lib/account-role'
 import { api, ApiError, type MeActivity, type MeProfile, type MeSummary, type NotificationSettings } from '../lib/api'
 import { formatDateTime, initialsFromName } from '../lib/format'
 
@@ -16,8 +21,7 @@ const TAB_LABEL: Record<MeTab, string> = {
 }
 
 const ROLE_LABEL: Record<string, string> = {
-  GLOBAL_ADMIN: 'Глобальный админ',
-  MEMBER: 'Участник',
+  ...ACCOUNT_ROLE_LABEL,
   OWNER: 'Владелец',
   VIEWER: 'Наблюдатель',
 }
@@ -82,43 +86,37 @@ export function MePage() {
     setParams(nextParams, { replace: true })
   }
 
+  const profileMeta = profile ? (
+    <div className="flex items-center gap-3 rounded-full bg-surface px-3 py-2">
+      <span className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground">
+        {initialsFromName(profile.name)}
+      </span>
+      <div className="min-w-0 text-sm">
+        <p className="font-medium text-foreground">{profile.name}</p>
+        <p className="text-muted-foreground">{profile.email}</p>
+      </div>
+    </div>
+  ) : null
+
   return (
-    <>
-      <header className="topbar">
-        <div>
-          <div className="kicker">Личный кабинет</div>
-          <h1 className="page-title">Мой профиль</h1>
-          <p className="page-lead">Сводка нагрузки, профиль, доступы, уведомления и пароль.</p>
-        </div>
-        {profile ? (
-          <div className="me-hero-chip" aria-hidden>
-            <span className="avatar lg">{initialsFromName(profile.name)}</span>
-            <div>
-              <strong>{profile.name}</strong>
-              <small>{profile.email}</small>
-            </div>
-          </div>
-        ) : null}
-      </header>
+    <div className="space-y-6">
+      <PageHeader
+        overline="Личный кабинет"
+        title="Мой профиль"
+        subtitle="Сводка нагрузки, профиль, доступы, уведомления и пароль."
+        meta={profileMeta}
+        toolbar={
+          <Tabs
+            items={(Object.keys(TAB_LABEL) as MeTab[]).map((key) => ({ id: key, label: TAB_LABEL[key] }))}
+            value={tab}
+            onChange={(id) => setTab(id as MeTab)}
+          />
+        }
+      />
 
-      <div className="content">
-        <div className="seg me-tabs" role="tablist" aria-label="Разделы кабинета">
-          {(Object.keys(TAB_LABEL) as MeTab[]).map((key) => (
-            <button
-              key={key}
-              type="button"
-              role="tab"
-              aria-selected={tab === key}
-              className={tab === key ? 'active' : undefined}
-              onClick={() => setTab(key)}
-            >
-              {TAB_LABEL[key]}
-            </button>
-          ))}
-        </div>
-
-        {loading ? <p className="muted">Загрузка…</p> : null}
-        {loadError ? <p className="form-error">{loadError}</p> : null}
+      <div className="space-y-4">
+        {loading ? <CardSkeleton /> : null}
+        {loadError ? <LoadErrorNotice message={loadError} /> : null}
 
         {!loading && tab === 'overview' ? <OverviewTab /> : null}
 
@@ -157,7 +155,7 @@ export function MePage() {
           />
         ) : null}
       </div>
-    </>
+    </div>
   )
 }
 

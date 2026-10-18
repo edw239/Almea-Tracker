@@ -12,9 +12,12 @@ import {
 } from '@dnd-kit/core'
 import { CSS } from '@dnd-kit/utilities'
 import type { ListStatus, Task } from '../types'
+import { useAxisLockedHorizontalScroll } from '../hooks/useAxisLockedHorizontalScroll'
 import { dueLabel, isOverdue } from '../lib/format'
 import { columnDropId, parseColumnDropId } from '../lib/mechanics'
+import { cn } from '../lib/utils'
 import { useStore } from '../store'
+import { BADGE_BASE } from '../lib/control-styles'
 import { Avatars } from './ui'
 
 const collisionDetection: CollisionDetection = (args) => {
@@ -35,6 +38,7 @@ export function BoardView({
 }) {
   const store = useStore()
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }))
+  const scrollerRef = useAxisLockedHorizontalScroll<HTMLDivElement>()
 
   const onDragEnd = (event: DragEndEvent) => {
     const overId = event.over?.id
@@ -49,7 +53,7 @@ export function BoardView({
 
   return (
     <DndContext sensors={sensors} collisionDetection={collisionDetection} onDragEnd={onDragEnd}>
-      <div className="board">
+      <div ref={scrollerRef} className="flex gap-3 overflow-x-auto pb-2">
         {columns.map((column) => (
           <BoardColumn
             key={column.id}
@@ -77,8 +81,14 @@ function BoardColumn({
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: columnDropId(column.id) })
   return (
-    <div ref={setNodeRef} className={`column ${isOver ? 'is-over' : ''}`}>
-      <h3>
+    <div
+      ref={setNodeRef}
+      className={cn(
+        'flex w-72 shrink-0 flex-col gap-2 rounded bg-surface p-2',
+        isOver && 'ring-2 ring-primary/30',
+      )}
+    >
+      <h3 className="px-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
         {column.name} · {tasks.length}
       </h3>
       {tasks.map((task) => (
@@ -107,15 +117,29 @@ function BoardCard({
       ref={setNodeRef}
       type="button"
       style={style}
-      className={`kanban-card ${active ? 'active' : ''} ${isDragging ? 'dragging' : ''}`}
+      className={cn(
+        'w-full rounded bg-elevated p-3 text-left transition-shadow',
+        active && 'accent-marker ring-1 ring-border',
+        isDragging && 'opacity-60 shadow-lg',
+      )}
       onClick={() => onOpen(task.id)}
       {...listeners}
       {...attributes}
     >
-      <strong>{task.title}</strong>
-      <p className="kanban-meta">
-        {task.domainLabel ? <span>{task.domainLabel}</span> : null}
-        {due ? <span className={overdue ? 'warn' : due === 'сегодня' ? 'today' : ''}>{due}</span> : null}
+      <strong className="block text-sm font-medium text-foreground">{task.title}</strong>
+      <p className="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+        {task.domainLabel ? <span className={BADGE_BASE}>{task.domainLabel}</span> : null}
+        {due ? (
+          <span
+            className={cn(
+              BADGE_BASE,
+              overdue && 'bg-[var(--danger-soft)] text-destructive',
+              !overdue && due === 'сегодня' && 'bg-accent text-accent-foreground',
+            )}
+          >
+            {due}
+          </span>
+        ) : null}
         <Avatars ids={task.assigneeIds} />
       </p>
     </button>

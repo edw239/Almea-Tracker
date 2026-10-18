@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  applyOptimisticMove,
   columnDropId,
   groupTasks,
   listDropId,
@@ -62,5 +63,36 @@ describe('groupTasks', () => {
   it('groups unassigned separately', () => {
     const groups = groupTasks(sample, 'ASSIGNEE')
     expect(groups.some((g) => g.key === 'unassigned')).toBe(true)
+  })
+})
+
+describe('applyOptimisticMove', () => {
+  const tasks = [
+    { id: 'a', listId: 'L1', position: 0 },
+    { id: 'b', listId: 'L1', position: 1 },
+    { id: 'c', listId: 'L1', position: 2 },
+    { id: 'x', listId: 'L2', position: 0 },
+  ]
+
+  it('moves to top when afterTaskId is null', () => {
+    const next = applyOptimisticMove(tasks, 'c', null)
+    const order = next.filter((t) => t.listId === 'L1').sort((a, b) => a.position - b.position)
+    expect(order.map((t) => t.id)).toEqual(['c', 'a', 'b'])
+  })
+
+  it('moves after a sibling', () => {
+    const next = applyOptimisticMove(tasks, 'c', 'a')
+    const order = next.filter((t) => t.listId === 'L1').sort((a, b) => a.position - b.position)
+    expect(order.map((t) => t.id)).toEqual(['a', 'c', 'b'])
+  })
+
+  it('moves across lists', () => {
+    const next = applyOptimisticMove(tasks, 'x', null, 'L1')
+    expect(next.find((t) => t.id === 'x')?.listId).toBe('L1')
+    expect(next.find((t) => t.id === 'x')?.position).toBe(0)
+  })
+
+  it('returns same reference when task is missing', () => {
+    expect(applyOptimisticMove(tasks, 'missing', null)).toBe(tasks)
   })
 })

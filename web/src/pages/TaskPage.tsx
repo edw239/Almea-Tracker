@@ -1,6 +1,11 @@
 import { useEffect } from 'react'
 import { Link, useParams } from 'react-router-dom'
+import { EmptyState } from '../components/EmptyState'
+import { PageHeader } from '../components/PageHeader'
 import { TaskPanel } from '../components/TaskPanel'
+import { Button } from '../components/ui/button'
+import { CardSkeleton } from '../components/ui/Skeleton'
+import { ListTodo } from '../lib/icons'
 import { useStore } from '../store'
 
 export function TaskPage() {
@@ -13,26 +18,33 @@ export function TaskPage() {
   }, [store, taskId])
 
   if (!task) {
-    return (
-      <div className="content">
-        <p>{store.ready ? 'Задача не найдена.' : 'Загрузка…'}</p>
-        <Link to="/">Назад</Link>
+    return store.ready ? (
+      <div className="space-y-4">
+        <EmptyState icon={ListTodo} title="Задача не найдена" description="Проверьте ссылку или права доступа." />
+        <Button variant="secondary" size="sm" asChild>
+          <Link to="/">Назад</Link>
+        </Button>
       </div>
+    ) : (
+      <CardSkeleton />
     )
   }
   const list = store.lists.find((item) => item.id === task.listId)
   return (
     <div className="with-panel">
       <div>
-        <header className="topbar">
-          <div>
-            <div className="kicker">Task</div>
-            <h1 className="page-title">Карточка</h1>
-            <p className="page-lead">
-              Deep-link. <Link to={`/lists/${task.listId}`}>{list?.name ?? 'Список'}</Link>
-            </p>
-          </div>
-        </header>
+        <PageHeader
+          overline="Task"
+          title="Карточка"
+          subtitle={
+            <>
+              Deep-link.{' '}
+              <Link className="text-link hover:underline" to={`/lists/${task.listId}`}>
+                {list?.name ?? 'Список'}
+              </Link>
+            </>
+          }
+        />
       </div>
       <TaskPanel task={task} />
     </div>

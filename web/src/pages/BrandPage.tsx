@@ -1,8 +1,13 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
+import { EmptyState } from '../components/EmptyState'
+import { LoadErrorNotice } from '../components/LoadErrorNotice'
+import { PageHeader } from '../components/PageHeader'
 import { TaskRow } from '../components/ui'
+import { Button } from '../components/ui/button'
 import { api, ApiError } from '../lib/api'
 import { mapApiTask } from '../lib/mappers'
+import { Building2 } from '../lib/icons'
 import type { Task } from '../types'
 
 export function BrandPage() {
@@ -53,33 +58,43 @@ export function BrandPage() {
   }
 
   return (
-    <>
-      <header className="topbar">
-        <div>
-          <div className="kicker">Бренд</div>
-          <h1 className="page-title">{name || '…'}</h1>
-          <p className="page-lead">
-            Задачи, видимые вам. {listId ? <Link to={`/lists/${listId}`}>Открыть list</Link> : null}
-          </p>
-          {error ? <p className="form-error">{error}</p> : null}
-        </div>
-        <div className="top-actions">
-          <button type="button" className="ghost" onClick={() => void toggleArchive()}>
-            {archived ? 'Разархивировать' : 'В архив'}
-          </button>
-          <Link className="ghost" to="/brands">
-            К справочнику
-          </Link>
-        </div>
-      </header>
-      <div className="content">
-        <div className="card-list">
+    <div className="space-y-6">
+      <PageHeader
+        overline="Бренд"
+        title={name || '…'}
+        subtitle={
+          <>
+            Задачи, видимые вам.{' '}
+            {listId ? (
+              <Link className="text-link hover:underline" to={`/lists/${listId}`}>
+                Открыть list
+              </Link>
+            ) : null}
+          </>
+        }
+        actions={
+          <>
+            <Button type="button" variant="secondary" size="sm" onClick={() => void toggleArchive()}>
+              {archived ? 'Разархивировать' : 'В архив'}
+            </Button>
+            <Button variant="ghost" size="sm" asChild>
+              <Link to="/brands">К справочнику</Link>
+            </Button>
+          </>
+        }
+      />
+
+      {error ? <LoadErrorNotice message={error} /> : null}
+
+      {tasks.length === 0 && !error ? (
+        <EmptyState icon={Building2} title="Задач по бренду нет" description="Создайте задачу с привязкой к этому бренду." />
+      ) : (
+        <div className="space-y-1 rounded bg-surface p-1">
           {tasks.map((task) => (
             <TaskRow key={task.id} task={task} onOpen={() => navigate(`/tasks/${task.id}`)} />
           ))}
         </div>
-        {tasks.length === 0 && !error ? <p className="empty">Нет видимых задач</p> : null}
-      </div>
-    </>
+      )}
+    </div>
   )
 }

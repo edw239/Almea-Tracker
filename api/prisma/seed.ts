@@ -84,6 +84,7 @@ async function main() {
     update: {},
     create: { spaceId: ops.id, userId: user.id, role: 'OWNER' },
   });
+  await seedProjectManager(ops.id);
   await seedStatuses(ops.id, null);
 
   const strategy = await prisma.taskList.upsert({
@@ -236,6 +237,26 @@ async function main() {
       },
     });
   }
+}
+
+async function seedProjectManager(opsSpaceId: string) {
+  const email = process.env.SEED_PM_EMAIL?.trim().toLowerCase();
+  const password = process.env.SEED_PM_PASSWORD;
+  if (!email || !password || password.length < 8) {
+    return;
+  }
+  const name = process.env.SEED_PM_NAME ?? 'Проджект';
+  const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
+  const manager = await prisma.user.upsert({
+    where: { email },
+    update: { name, role: UserRole.PROJECT_MANAGER, passwordHash, isActive: true },
+    create: { email, name, role: UserRole.PROJECT_MANAGER, passwordHash },
+  });
+  await prisma.taskSpaceMember.upsert({
+    where: { spaceId_userId: { spaceId: opsSpaceId, userId: manager.id } },
+    update: {},
+    create: { spaceId: opsSpaceId, userId: manager.id, role: 'MEMBER' },
+  });
 }
 
 main()

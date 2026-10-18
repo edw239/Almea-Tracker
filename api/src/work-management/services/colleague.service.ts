@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
-import { TaskSpaceMemberRole, TaskStatus, UserRole } from '@prisma/client';
+import { TaskSpaceMemberRole, TaskStatus } from '@prisma/client';
 import { AppError } from '../../common/errors';
+import { hasCompanyWorkScope } from '../../identity/auth/user-role';
 import type { AuthUser } from '../../identity/auth/jwt.strategy';
 import { PrismaService } from '../../prisma/prisma.service';
 import { TaskSpaceAccessService } from '../access/task-space-access.service';
@@ -81,7 +82,7 @@ export class ColleagueService {
   }
 
   private async canSeeColleagueStats(viewer: AuthUser, colleagueId: string): Promise<boolean> {
-    if (viewer.id === colleagueId || viewer.role === UserRole.GLOBAL_ADMIN) {
+    if (viewer.id === colleagueId || hasCompanyWorkScope(viewer.role)) {
       return true;
     }
     const owned = await this.prisma.taskSpaceMember.findMany({

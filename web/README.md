@@ -71,7 +71,23 @@ npm run dev
 | `store.tsx` | состояние + optimistic status/move с rollback |
 | `App.tsx` | `HashRouter` (`#/lists/...`) для статического деплоя |
 
-Дизайн: [docs/DESIGN_SYSTEM.md](../docs/DESIGN_SYSTEM.md).
+Дизайн: [docs/DESIGN_SYSTEM.md](../docs/DESIGN_SYSTEM.md) (v2 — правила Cosmonavt + палитра Almea).
+
+## UI-кит
+
+Стек: Tailwind v4 + Radix (подход shadcn) + Phosphor (обёртки в `lib/icons.ts`) + sonner.
+
+| Слой | Путь |
+| ---- | ---- |
+| Токены / motion | `src/index.css` |
+| Legacy-совместимость форм | `src/legacy-compat.css` (`@layer legacy`) |
+| Примитивы | `src/components/ui/*` |
+| Каркас | `src/components/layout/*` (Sidebar, TopBar, GlobalSearch, NotificationInbox, UserMenu) |
+| Page chrome | `PageHeader`, `PageToolbar`, `EmptyState`, `LoadErrorNotice` |
+| Confirm / toast | `hooks/useConfirm.tsx`, `lib/toast-bridge.ts` |
+| Contract-тесты | `lib/ds-contract.spec.ts` |
+
+Сайдбар: pin, idle-collapse 30s, resize, loupe. Поиск: Ctrl/⌘K по данным store.
 
 ## Render
 

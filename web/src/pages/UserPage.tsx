@@ -1,9 +1,17 @@
 import { useEffect, useState } from 'react'
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom'
+import { LoadErrorNotice } from '../components/LoadErrorNotice'
+import { PageHeader } from '../components/PageHeader'
+import { StatCard, StatTiles } from '../components/StatCard'
 import { TaskRow } from '../components/ui'
+import { Button } from '../components/ui/button'
+import { CardSkeleton } from '../components/ui/Skeleton'
+import { EmptyState } from '../components/EmptyState'
 import { useAuth } from '../auth'
+import { ACCOUNT_ROLE_LABEL } from '../lib/account-role'
 import { api, ApiError } from '../lib/api'
 import { initialsFromName } from '../lib/format'
+import { Flame, ListTodo, User } from '../lib/icons'
 import { mapApiTask } from '../lib/mappers'
 import type { Task } from '../types'
 
@@ -16,10 +24,7 @@ type ColleagueProfile = {
   tasks: Task[]
 }
 
-const ROLE_LABEL: Record<string, string> = {
-  GLOBAL_ADMIN: 'Глобальный админ',
-  MEMBER: 'Участник',
-}
+const ROLE_LABEL: Record<string, string> = { ...ACCOUNT_ROLE_LABEL }
 
 export function UserPage() {
   const { userId } = useParams<{ userId: string }>()
@@ -64,60 +69,63 @@ export function UserPage() {
     return <Navigate to="/me" replace />
   }
 
+  const metaChip = profile ? (
+    <div className="flex items-center gap-3 rounded-full bg-surface px-3 py-2">
+      <span className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground">
+        {initialsFromName(profile.name)}
+      </span>
+      <div className="min-w-0 text-sm">
+        <p className="font-medium text-foreground">{profile.name}</p>
+        <p className="text-muted-foreground">
+          {ROLE_LABEL[profile.role] ?? profile.role}
+          {profile.jobTitle ? ` · ${profile.jobTitle}` : ''}
+        </p>
+      </div>
+    </div>
+  ) : null
+
   return (
-    <>
-      <header className="topbar">
-        <div>
-          <div className="kicker">Коллега</div>
-          <h1 className="page-title">{profile?.name ?? 'Профиль'}</h1>
-          <p className="page-lead">
-            Только задачи, видимые вам. Чужие пространства не показываем (404-инвариант).
-          </p>
-          {error ? <p className="form-error">{error}</p> : null}
-        </div>
-        {profile ? (
-          <div className="me-hero-chip" aria-hidden>
-            <span className="avatar lg">{initialsFromName(profile.name)}</span>
-            <div>
-              <strong>{profile.name}</strong>
-              <small>
-                {ROLE_LABEL[profile.role] ?? profile.role}
-                {profile.jobTitle ? ` · ${profile.jobTitle}` : ''}
-              </small>
-            </div>
-          </div>
-        ) : null}
-      </header>
-      <div className="content">
-        {loading ? <p className="muted">Загрузка…</p> : null}
-        {profile?.stats ? (
-          <div className="stats">
-            <div className="stat">
-              <b>{profile.stats.open}</b>
-              <span>открытых (видимых)</span>
-            </div>
-            <div className="stat">
-              <b>{profile.stats.overdue}</b>
-              <span>просрочено</span>
-            </div>
-            <div className="stat">
-              <b>{profile.stats.shown}</b>
-              <span>в списке</span>
-            </div>
-          </div>
-        ) : null}
-        {!loading && profile && profile.tasks.length === 0 ? (
-          <p className="muted">Нет общих видимых задач.</p>
-        ) : null}
-        <div className="card-list">
-          {profile?.tasks.map((task) => (
+    <div className="space-y-6">
+      <PageHeader
+        overline="Коллега"
+        title={profile?.name ?? 'Профиль'}
+        subtitle="Только задачи, видимые вам. Чужие пространства не показываем (404-инвариант)."
+        meta={metaChip}
+      />
+
+      {error ? <LoadErrorNotice message={error} /> : null}
+
+      {loading ? <CardSkeleton /> : null}
+
+      {profile?.stats ? (
+        <StatTiles>
+          <StatCard title="открытых" value={String(profile.stats.open)} icon={ListTodo} />
+          <StatCard title="просрочено" value={String(profile.stats.overdue)} icon={Flame} />
+          <StatCard title="в списке" value={String(profile.stats.shown)} icon={User} />
+        </StatTiles>
+      ) : null}
+
+      {!loading && profile && profile.tasks.length === 0 ? (
+        <EmptyState
+          icon={ListTodo}
+          title="Нет общих видимых задач"
+          description="С этим коллегой пока нет пересечений по задачам."
+        />
+      ) : null}
+
+      {profile?.tasks.length ? (
+        <div className="space-y-1 rounded bg-surface p-1">
+          {profile.tasks.map((task) => (
             <TaskRow key={task.id} task={task} onOpen={() => navigate(`/tasks/${task.id}`)} />
           ))}
         </div>
-        <p className="muted me-meta">
+      ) : null}
+
+      <p className="text-sm text-muted-foreground">
+        <Button variant="link" size="sm" className="h-auto p-0" asChild>
           <Link to="/">← к My Work</Link>
-        </p>
-      </div>
-    </>
+        </Button>
+      </p>
+    </div>
   )
 }

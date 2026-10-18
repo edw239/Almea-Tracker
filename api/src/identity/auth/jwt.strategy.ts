@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PassportStrategy } from '@nestjs/passport';
+import { UserRole } from '@prisma/client';
 import type { Request } from 'express';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { AppError } from '../../common/errors';
@@ -19,7 +20,7 @@ export type AuthUser = {
   id: string;
   email: string;
   name: string;
-  role: 'GLOBAL_ADMIN' | 'MEMBER';
+  role: UserRole;
   mustChangePassword: boolean;
 };
 

@@ -4,6 +4,7 @@ import { AppError } from '../common/errors';
 import { isPrismaUniqueConflict } from '../common/prisma-errors';
 import { PrismaService } from '../prisma/prisma.service';
 import { hashPassword } from './auth/auth.service';
+import { removesGlobalAdmin } from './auth/user-role';
 import type { AuthUser } from './auth/jwt.strategy';
 import type { CreateUserDto, UpdateUserDto } from './dto/users.dto';
 import { generateTemporaryPassword } from './utils/temporary-password';
@@ -80,14 +81,14 @@ export class UsersService {
     if (dto.isActive === false && target.id === actor.id) {
       throw AppError.badRequest('Нельзя деактивировать собственную учётную запись');
     }
-    if (dto.role === UserRole.MEMBER && target.id === actor.id && target.role === UserRole.GLOBAL_ADMIN) {
+    if (
+      target.id === actor.id &&
+      removesGlobalAdmin(target.role, dto.role, false)
+    ) {
       throw AppError.badRequest('Нельзя снять с себя роль администратора');
     }
 
-    const demotingAdmin =
-      target.role === UserRole.GLOBAL_ADMIN &&
-      target.isActive &&
-      (dto.isActive === false || dto.role === UserRole.MEMBER);
+    const demotingAdmin = target.isActive && removesGlobalAdmin(target.role, dto.role, dto.isActive === false);
     if (demotingAdmin) {
       const activeAdmins = await this.prisma.user.count({
         where: { role: UserRole.GLOBAL_ADMIN, isActive: true },

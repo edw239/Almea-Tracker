@@ -3,6 +3,7 @@ import { useAuth } from './auth'
 import { api, ApiError, type MeSummary, type MyWorkScope, type TaskPatch } from './lib/api'
 import { SYSTEM_LIST_PERSONAL_INBOX } from './lib/constants'
 import { showBrowserNotification } from './lib/browser-notifications'
+import { toastStoreError } from './lib/toast-bridge'
 import {
   flattenSpaces,
   mapActivity,
@@ -12,6 +13,7 @@ import {
   mapRelations,
   type ApiTask,
 } from './lib/mappers'
+import { applyOptimisticMove } from './lib/mechanics'
 import type {
   Activity,
   Comment,
@@ -193,6 +195,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const fail = useCallback((error: unknown, fallback: string) => {
     const message = error instanceof ApiError ? error.message : fallback
     dispatch({ type: 'SET_ERROR', message })
+    toastStoreError(message)
   }, [])
 
   useEffect(() => {
@@ -437,12 +440,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const moveTask = useCallback(
     async (taskId: string, afterTaskId: string | null, listId?: string) => {
-      const previous = stateRef.current.tasks.find((item) => item.id === taskId)
+      const snapshot = stateRef.current.tasks
+      const optimistic = applyOptimisticMove(snapshot, taskId, afterTaskId, listId)
+      if (optimistic !== snapshot) {
+        dispatch({ type: 'MERGE_TASKS', tasks: optimistic })
+      }
       try {
         const updated = mapApiTask(await api.moveTask(taskId, { afterTaskId, listId }))
         dispatch({ type: 'UPSERT_TASK', task: updated })
       } catch (error) {
-        if (previous) dispatch({ type: 'UPSERT_TASK', task: previous })
+        dispatch({ type: 'MERGE_TASKS', tasks: snapshot })
         fail(error, 'Не удалось переместить задачу')
       }
     },

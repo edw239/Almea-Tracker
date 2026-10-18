@@ -1,8 +1,12 @@
 import { useEffect, useState } from 'react'
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom'
+import { EmptyState } from '../components/EmptyState'
+import { LoadErrorNotice } from '../components/LoadErrorNotice'
+import { PageHeader } from '../components/PageHeader'
 import { TaskRow } from '../components/ui'
 import { api } from '../lib/api'
 import { mapApiTask } from '../lib/mappers'
+import { Link2 } from '../lib/icons'
 import type { Task } from '../types'
 
 const UUID_RE =
@@ -51,31 +55,40 @@ export function HostEntityPage() {
   }
 
   return (
-    <>
-      <header className="topbar">
-        <div>
-          <div className="kicker">Host · {entityType}</div>
-          <h1 className="page-title">{label}</h1>
-          <p className="page-lead">
+    <div className="space-y-6">
+      <PageHeader
+        overline={`Host · ${entityType}`}
+        title={label}
+        subtitle={
+          <>
             Deep-link из доменной карточки. Список entity создаётся идемпотентно через host plugin.
             {listId ? (
               <>
                 {' '}
-                <Link to={`/lists/${listId}`}>Открыть list</Link>
+                <Link className="text-link hover:underline" to={`/lists/${listId}`}>
+                  Открыть list
+                </Link>
               </>
             ) : null}
-          </p>
-          {error ? <p className="form-error">{error}</p> : null}
-        </div>
-      </header>
-      <div className="content">
-        <div className="card-list">
+          </>
+        }
+      />
+
+      {error ? <LoadErrorNotice message={error} /> : null}
+
+      {tasks.length === 0 && !error ? (
+        <EmptyState
+          icon={Link2}
+          title="Нет задач на этой сущности"
+          description="Создайте задачу из списка или привяжите существующую."
+        />
+      ) : (
+        <div className="space-y-1 rounded bg-surface p-1">
           {tasks.map((task) => (
             <TaskRow key={task.id} task={task} onOpen={() => navigate(`/tasks/${task.id}`)} />
           ))}
         </div>
-        {tasks.length === 0 && !error ? <p className="empty">Нет задач на этой сущности</p> : null}
-      </div>
-    </>
+      )}
+    </div>
   )
 }

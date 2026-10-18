@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
-import { Prisma, TaskRelationType, TaskSpaceMemberRole, TaskStatus, UserRole } from '@prisma/client';
+import { Prisma, TaskRelationType, TaskSpaceMemberRole, TaskStatus } from '@prisma/client';
 import { RESCHEDULED_MIN_MOVES, DEFAULT_TIMEZONE } from '../../common/constants';
+import { hasCompanyWorkScope } from '../../identity/auth/user-role';
 import type { AuthUser } from '../../identity/auth/jwt.strategy';
 import { summaryDayBounds } from '../../identity/utils/zoned-day.util';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -185,11 +186,11 @@ export class OverviewService {
   }
 
   /**
-   * Company-wide for GLOBAL_ADMIN or OWNER of a non-system space;
+   * Company-wide for GLOBAL_ADMIN, PROJECT_MANAGER, or OWNER of a non-system space;
    * otherwise only spaces the actor can see (memberships + system).
    */
   private async buildVisibilityWhere(user: AuthUser): Promise<Prisma.TaskWhereInput> {
-    if (user.role === UserRole.GLOBAL_ADMIN) {
+    if (hasCompanyWorkScope(user.role)) {
       return {};
     }
     const owned = await this.prisma.taskSpaceMember.findFirst({

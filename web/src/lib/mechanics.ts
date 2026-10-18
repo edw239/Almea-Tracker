@@ -3,6 +3,42 @@
 export const COLUMN_PREFIX = 'column-'
 export const LIST_DROP_PREFIX = 'list-drop-'
 
+/**
+ * Optimistically reorder a task within (or into) a list.
+ * Places `taskId` immediately after `afterTaskId` (null = top of list).
+ * Returns a new tasks array; unknown taskId returns the original reference.
+ */
+export function applyOptimisticMove<T extends { id: string; listId: string; position: number }>(
+  tasks: readonly T[],
+  taskId: string,
+  afterTaskId: string | null,
+  listId?: string,
+): T[] {
+  const moving = tasks.find((task) => task.id === taskId)
+  if (!moving) return tasks as T[]
+
+  const targetListId = listId ?? moving.listId
+  const others = tasks.filter((task) => task.id !== taskId)
+  const inTarget = others
+    .filter((task) => task.listId === targetListId)
+    .sort((a, b) => a.position - b.position || a.id.localeCompare(b.id))
+
+  let insertAt = 0
+  if (afterTaskId != null) {
+    const afterIndex = inTarget.findIndex((task) => task.id === afterTaskId)
+    insertAt = afterIndex >= 0 ? afterIndex + 1 : inTarget.length
+  }
+
+  const reordered = [...inTarget]
+  reordered.splice(insertAt, 0, { ...moving, listId: targetListId })
+  const positioned = reordered.map((task, index) =>
+    task.position === index && task.listId === targetListId ? task : { ...task, position: index, listId: targetListId },
+  )
+
+  const outside = others.filter((task) => task.listId !== targetListId)
+  return [...outside, ...positioned]
+}
+
 export function columnDropId(statusId: string): string {
   return `${COLUMN_PREFIX}${statusId}`
 }

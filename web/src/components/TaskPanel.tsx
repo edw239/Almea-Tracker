@@ -1,15 +1,24 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
+import { useAuth } from '../auth'
 import { api } from '../lib/api'
 import { formatDateTime, PRIORITY_LABEL } from '../lib/format'
 import { resolveStatusesForList } from '../lib/status'
 import { useStore } from '../store'
 import type { Task } from '../types'
+import { chipClass } from '../lib/control-styles'
+import { CollapsibleSection } from './CollapsibleSection'
+import { DatePicker } from './DatePicker'
 import { Select } from './Select'
 import { MentionText } from './ui'
+import { Button } from './ui/button'
+import { FormNotice } from './ui/form-notice'
+import { Input } from './ui/input'
+import { X } from '../lib/icons'
 
 export function TaskPanel({ task, onClose }: { task: Task; onClose?: () => void }) {
   const store = useStore()
+  const auth = useAuth()
   const statuses = resolveStatusesForList(store, task.listId)
   const list = store.lists.find((item) => item.id === task.listId)
   const comments = store.comments.filter((item) => item.taskId === task.id)
@@ -20,6 +29,9 @@ export function TaskPanel({ task, onClose }: { task: Task; onClose?: () => void 
   const favorite = store.favorites.some((item) => item.entityType === 'TASK' && item.entityId === task.id)
   const isCreator = task.createdByUserId === store.currentUserId
   const isAssignee = task.assigneeIds.includes(store.currentUserId)
+  const canAcceptReview =
+    Boolean(task.submittedAt) &&
+    (isCreator || (auth.user?.role === 'PROJECT_MANAGER' && !isAssignee))
   const statusOptions =
     task.reviewRequired && isAssignee && !isCreator
       ? statuses.filter((item) => item.category !== 'DONE')
@@ -71,12 +83,12 @@ export function TaskPanel({ task, onClose }: { task: Task; onClose?: () => void 
       : null
 
   return (
-    <aside className="panel">
-      <div className="panel-head">
-        <div>
-          <div className="kicker">{list?.name}</div>
+    <aside className="panel sticky top-0 h-screen overflow-y-auto border-l border-border bg-surface px-5 py-6 scrollbar-subtle">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="label-overline mb-1">{list?.name}</p>
           <input
-            className="panel-title-input"
+            className="w-full border-0 bg-transparent font-display text-[1.375rem] font-medium leading-tight tracking-[-0.03em] text-foreground outline-none focus:shadow-none"
             value={title}
             aria-label="Название"
             onChange={(event) => setTitle(event.target.value)}
@@ -102,18 +114,20 @@ export function TaskPanel({ task, onClose }: { task: Task; onClose?: () => void 
             </p>
           ) : null}
         </div>
-        <div className="top-actions">
-          <button type="button" className="ghost" onClick={() => void store.toggleFavorite('TASK', task.id)}>
+        <div className="flex shrink-0 items-center gap-2">
+          <Button type="button" variant="ghost" size="compact" onClick={() => void store.toggleFavorite('TASK', task.id)}>
             {favorite ? 'В избранном' : 'В избранное'}
-          </button>
+          </Button>
           {onClose ? (
-            <button type="button" className="icon-btn" onClick={onClose} aria-label="Закрыть">
-              ×
-            </button>
+            <Button type="button" variant="outline" size="icon" className="size-9" onClick={onClose} aria-label="Закрыть">
+              <X size={16} />
+            </Button>
           ) : (
-            <Link className="icon-btn" to={`/lists/${task.listId}`} aria-label="К списку">
-              ×
-            </Link>
+            <Button type="button" variant="outline" size="icon" className="size-9" asChild>
+              <Link to={`/lists/${task.listId}`} aria-label="К списку">
+                <X size={16} />
+              </Link>
+            </Button>
           )}
         </div>
       </div>
@@ -174,8 +188,8 @@ export function TaskPanel({ task, onClose }: { task: Task; onClose?: () => void 
         {task.submittedAt ? (
           <p className="page-lead">Сдано на проверку {formatDateTime(task.submittedAt)}</p>
         ) : null}
-        {statusError ? <p className="form-error">{statusError}</p> : null}
-        {stuckError ? <p className="form-error">{stuckError}</p> : null}
+        {statusError ? <FormNotice tone="error">{statusError}</FormNotice> : null}
+        {stuckError ? <FormNotice tone="error">{stuckError}</FormNotice> : null}
       </div>
 
       {(isAssignee || task.ownerUserId === store.currentUserId) && task.status !== 'DONE' && task.status !== 'CANCELLED' ? (
@@ -244,7 +258,7 @@ export function TaskPanel({ task, onClose }: { task: Task; onClose?: () => void 
         </div>
       ) : null}
 
-      {task.submittedAt && isCreator ? (
+      {canAcceptReview ? (
         <div className="me-panel">
           <div className="top-actions">
             {doneColumn ? (
@@ -309,11 +323,11 @@ export function TaskPanel({ task, onClose }: { task: Task; onClose?: () => void 
       </div>
 
       <div className="field">
-        <label>Срок</label>
-        <input
-          type="date"
+        <label htmlFor={`due-${task.id}`}>Срок</label>
+        <DatePicker
+          id={`due-${task.id}`}
           value={task.dueDate ?? ''}
-          onChange={(event) => void store.patchTask(task.id, { dueDate: event.target.value || null })}
+          onChange={(dueDate) => void store.patchTask(task.id, { dueDate: dueDate || null })}
         />
       </div>
 
@@ -326,7 +340,7 @@ export function TaskPanel({ task, onClose }: { task: Task; onClose?: () => void 
               <button
                 key={user.id}
                 type="button"
-                className={`chip ${on ? 'on' : ''}`}
+                className={chipClass(on)}
                 onClick={() => void store.toggleAssignee(task.id, user.id)}
               >
                 {user.name}
@@ -378,12 +392,12 @@ export function TaskPanel({ task, onClose }: { task: Task; onClose?: () => void 
         </div>
       ) : null}
 
-      <div className="field">
-        <label>Чеклист</label>
+      <CollapsibleSection title="Чеклист" count={task.checklist.length} defaultOpen padding="sm" variant="nested">
         {task.checklist.map((item) => (
-          <label key={item.id} className="check">
+          <label key={item.id} className="flex items-start gap-2 text-sm">
             <input
               type="checkbox"
+              className="mt-1"
               checked={item.done}
               onChange={() => void store.toggleChecklist(task.id, item.id)}
             />
@@ -391,7 +405,7 @@ export function TaskPanel({ task, onClose }: { task: Task; onClose?: () => void 
           </label>
         ))}
         <form
-          className="quick"
+          className="flex gap-2 pt-2"
           onSubmit={(event: FormEvent) => {
             event.preventDefault()
             if (!checkText.trim()) return
@@ -399,14 +413,13 @@ export function TaskPanel({ task, onClose }: { task: Task; onClose?: () => void 
             setCheckText('')
           }}
         >
-          <input value={checkText} onChange={(event) => setCheckText(event.target.value)} placeholder="Пункт…" />
+          <Input value={checkText} onChange={(event) => setCheckText(event.target.value)} placeholder="Пункт…" />
         </form>
-      </div>
+      </CollapsibleSection>
 
-      <div className="field">
-        <label>Комментарии</label>
+      <CollapsibleSection title="Комментарии" count={comments.length} defaultOpen padding="sm" variant="nested">
         <form
-          className="quick"
+          className="flex flex-wrap gap-2"
           onSubmit={(event: FormEvent) => {
             event.preventDefault()
             if (!comment.trim()) return
@@ -414,44 +427,42 @@ export function TaskPanel({ task, onClose }: { task: Task; onClose?: () => void 
             setComment('')
           }}
         >
-          <input
+          <Input
+            className="min-w-[12rem] flex-1"
             value={comment}
             onChange={(event) => setComment(event.target.value)}
             placeholder="Комментарий… @[uuid] для упоминания"
           />
-          <button className="pill" type="submit">
+          <Button type="submit" size="sm">
             Отправить
-          </button>
+          </Button>
         </form>
         {comments.map((item) => {
           const author = store.users.find((user) => user.id === item.userId)
           return (
-            <div className="comment" key={item.id}>
-              <small>
+            <div className="rounded bg-inset/50 px-3 py-2" key={item.id}>
+              <small className="text-xs text-muted-foreground">
                 {author?.name} · {formatDateTime(item.createdAt)}
               </small>
-              <p>
+              <p className="mt-1 text-sm">
                 <MentionText body={item.body} users={store.users} />
               </p>
             </div>
           )
         })}
-      </div>
+      </CollapsibleSection>
 
-      <div className="field">
-        <label>Активность</label>
-        {activity.length === 0 ? <p className="muted">Пока нет записей</p> : null}
+      <CollapsibleSection title="Активность" count={activity.length} padding="sm" variant="nested">
+        {activity.length === 0 ? <p className="text-sm text-muted-foreground">Пока нет записей</p> : null}
         {activity.map((item) => {
           const author = store.users.find((user) => user.id === item.userId)
           return (
-            <div className="comment" key={item.id}>
-              <small>
-                {author?.name} {item.text} · {formatDateTime(item.createdAt)}
-              </small>
+            <div className="text-sm text-muted-foreground" key={item.id}>
+              {author?.name} {item.text} · {formatDateTime(item.createdAt)}
             </div>
           )
         })}
-      </div>
+      </CollapsibleSection>
     </aside>
   )
 }

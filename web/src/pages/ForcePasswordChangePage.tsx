@@ -1,6 +1,10 @@
 import { useState, type FormEvent } from 'react'
 import { Navigate } from 'react-router-dom'
 import { useAuth } from '../auth'
+import { BrandMark } from '../components/BrandMark'
+import { Button } from '../components/ui/button'
+import { FormNotice } from '../components/ui/form-notice'
+import { Input } from '../components/ui/input'
 import { api, ApiError } from '../lib/api'
 
 export function ForcePasswordChangePage() {
@@ -41,19 +45,23 @@ export function ForcePasswordChangePage() {
   }
 
   return (
-    <div className="login-screen">
-      <form className="login-card" onSubmit={(event) => void onSubmit(event)}>
-        <div className="brand">
-          <span className="brand-name">almea</span>
-          <span className="brand-meta">tracker</span>
+    <div className="flex min-h-screen items-center justify-center bg-base p-6">
+      <form
+        className="surface-card w-full max-w-md space-y-5 rounded p-8"
+        onSubmit={(event) => void onSubmit(event)}
+      >
+        <BrandMark />
+        <div>
+          <h1 className="text-display-lg text-foreground">Смените пароль</h1>
+          <p className="mt-1.5 text-sm text-muted-foreground">
+            Вам выдан временный пароль. Дальше в трекер можно только со своим.
+          </p>
         </div>
-        <h1 className="page-title">Смените пароль</h1>
-        <p className="page-lead">
-          Вам выдан временный пароль. Дальше в трекер можно только со своим.
-        </p>
-        <div className="field">
-          <label htmlFor="tmp-cur">Временный пароль</label>
-          <input
+        <div className="space-y-2">
+          <label className="text-sm font-medium text-foreground" htmlFor="tmp-cur">
+            Временный пароль
+          </label>
+          <Input
             id="tmp-cur"
             type="password"
             autoComplete="current-password"
@@ -62,9 +70,11 @@ export function ForcePasswordChangePage() {
             required
           />
         </div>
-        <div className="field">
-          <label htmlFor="tmp-new">Новый пароль</label>
-          <input
+        <div className="space-y-2">
+          <label className="text-sm font-medium text-foreground" htmlFor="tmp-new">
+            Новый пароль
+          </label>
+          <Input
             id="tmp-new"
             type="password"
             autoComplete="new-password"
@@ -74,9 +84,11 @@ export function ForcePasswordChangePage() {
             required
           />
         </div>
-        <div className="field">
-          <label htmlFor="tmp-confirm">Повтор</label>
-          <input
+        <div className="space-y-2">
+          <label className="text-sm font-medium text-foreground" htmlFor="tmp-confirm">
+            Повтор
+          </label>
+          <Input
             id="tmp-confirm"
             type="password"
             autoComplete="new-password"
@@ -86,13 +98,13 @@ export function ForcePasswordChangePage() {
             required
           />
         </div>
-        {error ? <p className="form-error">{error}</p> : null}
-        <button className="pill" type="submit" disabled={pending}>
+        {error ? <FormNotice tone="error">{error}</FormNotice> : null}
+        <Button type="submit" className="w-full" disabled={pending}>
           {pending ? 'Сохраняем…' : 'Продолжить'}
-        </button>
-        <button className="text-btn" type="button" onClick={() => void auth.logout()}>
+        </Button>
+        <Button type="button" variant="ghost" className="w-full" onClick={() => void auth.logout()}>
           Выйти
-        </button>
+        </Button>
       </form>
     </div>
   )

@@ -1,9 +1,16 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { BoardView } from '../components/BoardView'
+import { EmptyState } from '../components/EmptyState'
+import { LoadErrorNotice } from '../components/LoadErrorNotice'
+import { PageHeader } from '../components/PageHeader'
+import { PageToolbar } from '../components/PageToolbar'
 import { Select } from '../components/Select'
 import { TaskPanel } from '../components/TaskPanel'
 import { Avatars, QuickAdd, StatusChip, TaskRow } from '../components/ui'
+import { Button } from '../components/ui/button'
+import { CardSkeleton } from '../components/ui/Skeleton'
+import { useConfirm } from '../hooks/useConfirm'
 import { ApiError, api } from '../lib/api'
 import {
   buildListFilters,
@@ -16,6 +23,9 @@ import {
 import { byPosition, formatDay, formatMonthYear, isoDate, monthGrid, startOfDay, PRIORITY_LABEL, STATUS_LABEL } from '../lib/format'
 import { groupTasks, type GroupBy } from '../lib/mechanics'
 import { boardColumns, resolveStatusesForList } from '../lib/status'
+import { FILTER_TOKEN, SEGMENT_TRACK, segmentItemClass } from '../lib/control-styles'
+import { ListTodo } from '../lib/icons'
+import { cn } from '../lib/utils'
 import { useStore } from '../store'
 import type { ListStatus, Task, TaskPriority, TaskStatus, ViewType } from '../types'
 
@@ -57,6 +67,7 @@ export function ListPage() {
   const { listId } = useParams()
   const [params, setParams] = useSearchParams()
   const store = useStore()
+  const { confirm, prompt } = useConfirm()
   const list = store.lists.find((item) => item.id === listId)
   const view = (params.get('view') as ViewType | null) ?? 'LIST'
   const selectedId = params.get('task')
@@ -164,7 +175,12 @@ export function ListPage() {
 
   const saveCurrentView = useCallback(async () => {
     if (!listId) return
-    const name = window.prompt('Название вида')
+    const name = await prompt({
+      title: 'Сохранить вид',
+      description: 'Как назвать сохранённый вид?',
+      confirmLabel: 'Сохранить',
+      placeholder: 'Название вида',
+    })
     if (!name?.trim()) return
     setBusy(true)
     setActionError(null)
@@ -191,11 +207,17 @@ export function ListPage() {
     } finally {
       setBusy(false)
     }
-  }, [appliedFilters, groupBy, listId, reloadExtras, reportError, view])
+  }, [appliedFilters, groupBy, listId, prompt, reloadExtras, reportError, view])
 
   const deleteActiveView = useCallback(async () => {
     if (!listId || !activeViewId) return
-    if (!window.confirm('Удалить сохранённый вид?')) return
+    const ok = await confirm({
+      title: 'Удалить сохранённый вид?',
+      description: 'Вид исчезнет у всех, кому он был доступен.',
+      confirmLabel: 'Удалить',
+      destructive: true,
+    })
+    if (!ok) return
     setBusy(true)
     setActionError(null)
     try {
@@ -207,7 +229,7 @@ export function ListPage() {
     } finally {
       setBusy(false)
     }
-  }, [activeViewId, listId, reloadExtras, reportError])
+  }, [activeViewId, confirm, listId, reloadExtras, reportError])
 
   const createFromTemplate = useCallback(
     async (templateId: string) => {
@@ -228,7 +250,13 @@ export function ListPage() {
 
   const createWeeklySchedule = useCallback(async () => {
     if (!listId) return
-    const title = window.prompt('Название расписания', 'Еженедельный пакет')
+    const title = await prompt({
+      title: 'Новое расписание',
+      description: 'Название еженедельного пакета задач.',
+      confirmLabel: 'Создать',
+      defaultValue: 'Еженедельный пакет',
+      placeholder: 'Название расписания',
+    })
     if (!title?.trim()) return
     setBusy(true)
     setActionError(null)
@@ -250,7 +278,7 @@ export function ListPage() {
     } finally {
       setBusy(false)
     }
-  }, [listId, reloadExtras, reportError, templates])
+  }, [listId, prompt, reloadExtras, reportError, templates])
 
   const toggleSchedule = useCallback(
     async (scheduleId: string, isActive: boolean) => {
@@ -281,7 +309,11 @@ export function ListPage() {
   )
 
   if (!list) {
-    return <p className="content">{store.ready ? 'Список не найден' : 'Загрузка…'}</p>
+    return store.ready ? (
+      <EmptyState icon={ListTodo} title="Список не найден" description="Проверьте ссылку или права доступа." />
+    ) : (
+      <CardSkeleton />
+    )
   }
 
   const selected = store.tasks.find((task) => task.id === selectedId)
@@ -289,80 +321,96 @@ export function ListPage() {
   const personal = list.systemKey === 'personal-inbox'
   const empty = tasks.length === 0
 
+  const listToolbar = (
+    <PageToolbar
+      leading={
+        <div className={cn(SEGMENT_TRACK, 'p-0.5')} role="tablist" aria-label="Вид списка">
+          {VIEWS.map((item) => {
+            const next = new URLSearchParams(params)
+            next.set('view', item.id)
+            return (
+              <Link
+                key={item.id}
+                to={`/lists/${list.id}?${next}`}
+                role="tab"
+                aria-selected={view === item.id}
+                className={segmentItemClass(view === item.id)}
+              >
+                {item.label}
+              </Link>
+            )
+          })}
+        </div>
+      }
+      trailing={
+        <>
+          <Select
+            variant="toolbar"
+            aria-label="Группировка"
+            value={groupBy}
+            options={GROUP_OPTIONS.map((item) => ({ value: item.id, label: item.label }))}
+            onChange={(next) => {
+              setGroupBy(next)
+              void api.putViewPreference({ listId: list.id, groupBy: next, viewType: view })
+            }}
+          />
+          <Select
+            variant="toolbar"
+            aria-label="Сохранённые виды"
+            value={activeViewId}
+            disabled={busy}
+            placeholder="Виды…"
+            options={[
+              { value: '', label: 'Виды…' },
+              ...savedViews.map((item) => ({
+                value: item.id,
+                label: `${item.name}${item.isShared ? ' · shared' : ''}`,
+              })),
+            ]}
+            onChange={(id) => {
+              if (!id) {
+                setActiveViewId('')
+                return
+              }
+              const saved = savedViews.find((item) => item.id === id)
+              if (saved) applySavedView(saved)
+            }}
+          />
+          <Button type="button" variant="ghost" size="compact" disabled={busy} onClick={() => void saveCurrentView()}>
+            Сохранить вид
+          </Button>
+          {activeViewId ? (
+            <Button type="button" variant="ghost" size="compact" disabled={busy} onClick={() => void deleteActiveView()}>
+              Удалить вид
+            </Button>
+          ) : null}
+          <Button type="button" variant="ghost" size="compact" onClick={() => void store.toggleFavorite('TASK_LIST', list.id)}>
+            {starred ? 'В избранном' : 'В избранное'}
+          </Button>
+          <Button type="button" variant="ghost" size="compact" onClick={() => setStatusEditorOpen(true)}>
+            Колонки
+          </Button>
+        </>
+      }
+    />
+  )
+
   return (
     <div className={selected ? 'with-panel' : undefined}>
-      <div>
-        <header className="topbar">
-          <div>
-            <div className="kicker">List</div>
-            <h1 className="page-title">{list.name}</h1>
-            <p className="page-lead">
-              {personal
-                ? 'Личный захват. Пока вы исполнитель — задача видна в Моей работе.'
-                : 'Единица работы. Создайте задачу, откройте карточку или перетащите на доске.'}
-            </p>
-            {store.error || actionError ? <p className="form-error">{store.error ?? actionError}</p> : null}
-          </div>
-          <div className="top-actions">
-            <div className="seg">
-              {VIEWS.map((item) => {
-                const next = new URLSearchParams(params)
-                next.set('view', item.id)
-                return (
-                  <Link key={item.id} to={`/lists/${list.id}?${next}`} className={view === item.id ? 'active' : ''}>
-                    {item.label}
-                  </Link>
-                )
-              })}
-            </div>
-            <Select
-              variant="toolbar"
-              aria-label="Группировка"
-              value={groupBy}
-              options={GROUP_OPTIONS.map((item) => ({ value: item.id, label: item.label }))}
-              onChange={(next) => {
-                setGroupBy(next)
-                void api.putViewPreference({ listId: list.id, groupBy: next, viewType: view })
-              }}
-            />
-            <Select
-              variant="toolbar"
-              aria-label="Сохранённые виды"
-              value={activeViewId}
-              disabled={busy}
-              placeholder="Виды…"
-              options={[
-                { value: '', label: 'Виды…' },
-                ...savedViews.map((item) => ({
-                  value: item.id,
-                  label: `${item.name}${item.isShared ? ' · shared' : ''}`,
-                })),
-              ]}
-              onChange={(id) => {
-                if (!id) {
-                  setActiveViewId('')
-                  return
-                }
-                const saved = savedViews.find((item) => item.id === id)
-                if (saved) applySavedView(saved)
-              }}
-            />
-            <button type="button" className="ghost" disabled={busy} onClick={() => void saveCurrentView()}>
-              Сохранить вид
-            </button>
-            {activeViewId ? (
-              <button type="button" className="ghost" disabled={busy} onClick={() => void deleteActiveView()}>
-                Удалить вид
-              </button>
-            ) : null}
-            <button type="button" className="ghost" onClick={() => void store.toggleFavorite('TASK_LIST', list.id)}>
-              {starred ? 'В избранном' : 'В избранное'}
-            </button>
-            <button type="button" className="ghost" onClick={() => setStatusEditorOpen(true)}>
-              Колонки
-            </button>
-          </div>
-        </header>
+      <div className="space-y-4">
+        <PageHeader
+          overline="List"
+          title={list.name}
+          subtitle={
+            personal
+              ? 'Личный захват. Пока вы исполнитель — задача видна в Моей работе.'
+              : 'Единица работы. Создайте задачу, откройте карточку или перетащите на доске.'
+          }
+          toolbar={listToolbar}
+        />
+        {store.error || actionError ? (
+          <LoadErrorNotice message={store.error ?? actionError ?? ''} />
+        ) : null}
         {statusEditorOpen ? (
           <StatusEditorPanel
             listId={list.id}
@@ -371,22 +419,29 @@ export function ListPage() {
             onChanged={() => void store.refreshListStatuses(list.id)}
           />
         ) : null}
-        <div className="content">
-          <form
-            className="filter-bar"
-            onSubmit={(event) => {
-              event.preventDefault()
-              const next = buildListFilters(filterDraft)
-              setAppliedFilters(next)
-              setActiveViewId('')
-              void api.putViewPreference({
-                listId: list.id,
-                viewType: view,
-                groupBy,
-                filters: next ? JSON.parse(next) : null,
-              })
-            }}
+        <div className="space-y-4">
+          <PageToolbar
+            secondary={
+              appliedFilters ? (
+                <span className={cn(FILTER_TOKEN, 'px-2.5')}>Фильтр активен</span>
+              ) : null
+            }
           >
+            <form
+              className="flex min-w-0 flex-wrap items-center gap-2"
+              onSubmit={(event) => {
+                event.preventDefault()
+                const next = buildListFilters(filterDraft)
+                setAppliedFilters(next)
+                setActiveViewId('')
+                void api.putViewPreference({
+                  listId: list.id,
+                  viewType: view,
+                  groupBy,
+                  filters: next ? JSON.parse(next) : null,
+                })
+              }}
+            >
             <Select
               variant="toolbar"
               aria-label="Статус"
@@ -434,13 +489,14 @@ export function ListPage() {
               value={filterDraft.title}
               onChange={(event) => setFilterDraft((prev) => ({ ...prev, title: event.target.value }))}
             />
-            <button className="pill" type="submit">
+            <Button type="submit" size="sm">
               Фильтр
-            </button>
+            </Button>
             {hasActiveFilters(filterDraft) || appliedFilters ? (
-              <button
+              <Button
                 type="button"
-                className="ghost"
+                variant="ghost"
+                size="compact"
                 onClick={() => {
                   setFilterDraft(EMPTY_FILTER)
                   setAppliedFilters(undefined)
@@ -454,9 +510,10 @@ export function ListPage() {
                 }}
               >
                 Сбросить
-              </button>
+              </Button>
             ) : null}
-          </form>
+            </form>
+          </PageToolbar>
 
           <div className="template-bar">
             <Select
@@ -513,11 +570,15 @@ export function ListPage() {
           ) : null}
 
           {empty ? (
-            <div className="empty">
-              {appliedFilters
-                ? 'Нет задач по фильтру. Сбросьте фильтр или измените условия.'
-                : 'В списке пока пусто. Добавьте задачу или разверните шаблон.'}
-            </div>
+            <EmptyState
+              icon={ListTodo}
+              title={appliedFilters ? 'Нет задач по фильтру' : 'В списке пока пусто'}
+              description={
+                appliedFilters
+                  ? 'Сбросьте фильтр или измените условия.'
+                  : 'Добавьте задачу или разверните шаблон.'
+              }
+            />
           ) : null}
 
           {view === 'LIST' ? (

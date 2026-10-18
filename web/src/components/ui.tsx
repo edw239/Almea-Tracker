@@ -2,43 +2,61 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { ListStatus, Task, User } from '../types'
 import { api, ApiError } from '../lib/api'
+import { BADGE_BASE } from '../lib/control-styles'
 import { dueLabel, isOverdue, progress } from '../lib/format'
+import { cn } from '../lib/utils'
 import { resolveStatusesForList } from '../lib/status'
 import { useStore } from '../store'
+import { DatePicker } from './DatePicker'
 import { Select } from './Select'
+import { Button } from './ui/button'
+import { FormNotice } from './ui/form-notice'
+import { Input } from './ui/input'
 
 export function Avatars({ ids }: { ids: string[] }) {
   const navigate = useNavigate()
   const { users, currentUserId } = useStore()
-  const shown = ids.slice(0, 3)
+  const resolved = ids
+    .map((id) => users.find((item) => item.id === id))
+    .filter((user): user is User => user != null)
+  const shown = resolved.slice(0, 3)
+  const overflow = resolved.length - shown.length
+
+  if (shown.length === 0) return null
+
   return (
-    <span className="avatars">
-      {shown.map((id) => {
-        const user = users.find((item) => item.id === id)
-        if (!user) return null
-        return (
-          <button
-            type="button"
-            className="avatar sm stack"
-            key={id}
-            title={user.name}
-            aria-label={user.name}
-            onClick={(event) => {
-              event.stopPropagation()
-              navigate(id === currentUserId ? '/me' : `/users/${id}`)
-            }}
-          >
-            {user.initials}
-          </button>
-        )
-      })}
+    <span className="inline-flex items-center" onClick={(event) => event.stopPropagation()} role="presentation">
+      {shown.map((user, index) => (
+        <button
+          type="button"
+          key={user.id}
+          title={user.name}
+          aria-label={user.name}
+          className={cn(
+            'relative inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-[10px] font-semibold text-primary-foreground ring-2 ring-elevated',
+            index > 0 && '-ml-1.5',
+          )}
+          style={{ zIndex: shown.length - index }}
+          onClick={() => navigate(user.id === currentUserId ? '/me' : `/users/${user.id}`)}
+        >
+          {user.initials}
+        </button>
+      ))}
+      {overflow > 0 ? (
+        <span
+          className="-ml-1.5 relative inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-inset text-[10px] font-semibold text-muted-foreground ring-2 ring-elevated"
+          title={`Ещё ${overflow}`}
+        >
+          +{overflow}
+        </span>
+      ) : null}
     </span>
   )
 }
 
 export function StatusChip({ task, statuses }: { task: Task; statuses: ListStatus[] }) {
   const status = statuses.find((item) => item.id === task.listStatusId)
-  return <span className="chip">{status?.name ?? task.status}</span>
+  return <span className={BADGE_BASE}>{status?.name ?? task.status}</span>
 }
 
 export function TaskRow({
@@ -58,17 +76,43 @@ export function TaskRow({
   const bar = progress(task)
 
   return (
-    <button type="button" className={`task-row ${active ? 'active' : ''}`} onClick={onOpen}>
-      <span className={`prio ${task.priority}`} />
-      <span>
-        <span className="task-title">{task.title}</span>
-        <span className="task-meta">
-          {list ? <span className="chip">{list.name}</span> : null}
+    <button
+      type="button"
+      className={cn(
+        'flex w-full items-center gap-3 rounded px-3 py-2.5 text-left transition-colors hover:bg-inset',
+        active && 'accent-marker bg-surface',
+      )}
+      onClick={onOpen}
+    >
+      <span
+        className={cn(
+          'h-8 w-1 shrink-0 rounded-full',
+          task.priority === 'URGENT' && 'bg-destructive',
+          task.priority === 'HIGH' && 'bg-accent',
+          task.priority === 'MEDIUM' && 'bg-muted-foreground/40',
+          task.priority === 'LOW' && 'bg-inset',
+        )}
+        aria-hidden
+      />
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm font-medium text-foreground">{task.title}</span>
+        <span className="mt-1 flex flex-wrap items-center gap-1.5 text-xs">
+          {list ? <span className={BADGE_BASE}>{list.name}</span> : null}
           <StatusChip task={task} statuses={statuses} />
-          {task.domainLabel ? <span className="chip">{task.domainLabel}</span> : null}
-          {due ? <span className={`chip ${overdue ? 'warn' : due === 'сегодня' ? 'today' : ''}`}>{due}</span> : null}
+          {task.domainLabel ? <span className={BADGE_BASE}>{task.domainLabel}</span> : null}
+          {due ? (
+            <span
+              className={cn(
+                BADGE_BASE,
+                overdue && 'bg-[var(--danger-soft)] text-destructive',
+                !overdue && due === 'сегодня' && 'bg-accent text-accent-foreground',
+              )}
+            >
+              {due}
+            </span>
+          ) : null}
           {bar.total > 0 ? (
-            <span>
+            <span className="text-muted-foreground">
               {bar.done}/{bar.total}
             </span>
           ) : null}
@@ -87,7 +131,11 @@ export function MentionText({ body, users }: { body: string; users: User[] }) {
         const match = part.match(/^@\[(.+)\]$/)
         if (!match) return <span key={index}>{part}</span>
         const user = users.find((item) => item.id === match[1])
-        return <strong key={index}>@{user?.name ?? match[1]}</strong>
+        return (
+          <strong key={index} className="font-medium text-foreground">
+            @{user?.name ?? match[1]}
+          </strong>
+        )
       })}
     </>
   )
@@ -158,7 +206,7 @@ export function QuickAdd({
 
   return (
     <form
-      className="quick quick-row"
+      className="flex flex-wrap items-end gap-2 rounded bg-surface p-3"
       onSubmit={(event) => {
         event.preventDefault()
         void submit()
@@ -170,13 +218,14 @@ export function QuickAdd({
         }
       }}
     >
-      <input
+      <Input
         name="title"
         value={title}
         onChange={(event) => setTitle(event.target.value)}
         placeholder={placeholder}
         disabled={pending}
         aria-label="Название"
+        className="min-w-[12rem] flex-1"
       />
       <Select
         variant="inline"
@@ -190,14 +239,11 @@ export function QuickAdd({
         ]}
         onChange={setAssigneeId}
       />
-      <input
-        name="due"
-        type="date"
+      <DatePicker
         value={dueDate}
-        onChange={(event) => setDueDate(event.target.value)}
+        onChange={setDueDate}
         disabled={pending}
-        aria-label="Срок"
-        required={Boolean(assigneeId && assigneeId !== store.currentUserId)}
+        className="w-40"
       />
       <Select
         variant="inline"
@@ -211,10 +257,14 @@ export function QuickAdd({
         ]}
         onChange={setBrandId}
       />
-      <button className="pill" type="submit" disabled={pending}>
+      <Button type="submit" size="sm" disabled={pending}>
         {pending ? '…' : 'Добавить'}
-      </button>
-      {error ? <p className="form-error quick-error">{error}</p> : null}
+      </Button>
+      {error ? (
+        <FormNotice tone="error" className="w-full">
+          {error}
+        </FormNotice>
+      ) : null}
     </form>
   )
 }

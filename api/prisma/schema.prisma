@@ -9,6 +9,7 @@ datasource db {
 
 enum UserRole {
   GLOBAL_ADMIN
+  PROJECT_MANAGER
   MEMBER
 }
 

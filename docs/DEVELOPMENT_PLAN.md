@@ -20,7 +20,7 @@
 - [x] Репозиторий `Almea-Tracker`
 - [x] Порт гайда в `docs/task-tracker-principles.md`
 - [x] Этот план
-- [x] Дизайн-система v1: [DESIGN_SYSTEM.md](./DESIGN_SYSTEM.md)
+- [x] Дизайн-система v1 → **v2** (2026-10-17): [DESIGN_SYSTEM.md](./DESIGN_SYSTEM.md) — правила Cosmonavt + палитра Almea; Tailwind/Radix UI-кит, сайдбар (loupe/pin/resize), TopBar Ctrl+K
 - [x] Стек: NestJS + Prisma + PostgreSQL в `api/`; JWT в httpOnly cookie
 - [x] Host Plugin: `domain_entity_id` nullable + `ensureEntityList`
 - [x] Язык UI и seed-статусов: RU
