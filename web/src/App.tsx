@@ -7,6 +7,8 @@ import { ConfirmProvider } from './hooks/useConfirm'
 import { FavoritesPage, MyWorkPage, OverduePage } from './pages/HomePages'
 import { OverviewPage } from './pages/OverviewPage'
 import { BrandPage } from './pages/BrandPage'
+import { ProjectPage } from './pages/ProjectPage'
+import { ProjectsPage } from './pages/ProjectsPage'
 import { BrandsPage } from './pages/BrandsPage'
 import { HostEntityPage } from './pages/HostEntityPage'
 import { InboxPage } from './pages/InboxPage'
@@ -64,6 +66,8 @@ export default function App() {
                       </RequireAdmin>
                     }
                   />
+                  <Route path="/projects" element={<ProjectsPage />} />
+                  <Route path="/projects/:projectId" element={<ProjectPage />} />
                   <Route path="/brands" element={<BrandsPage />} />
                   <Route path="/brands/:brandId" element={<BrandPage />} />
                   <Route path="/users/:userId" element={<UserPage />} />

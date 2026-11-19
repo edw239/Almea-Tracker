@@ -5,6 +5,7 @@ describe('suggestSpaceKey', () => {
     expect(suggestSpaceKey('Операции', 'ops')).toBe('OPS');
     expect(suggestSpaceKey('Личное', 'personal')).toBe('ME');
     expect(suggestSpaceKey('Host', 'host')).toBe('BR');
+    expect(suggestSpaceKey('Координация проектов', 'projects')).toBe('PRJ');
   });
 
   it('transliterates a multi-word Russian name to initials', () => {

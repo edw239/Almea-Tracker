@@ -119,6 +119,7 @@ export type Task = {
   domainEntityId: string | null
   domainEntityType: string | null
   hostEntityId: string | null
+  projectId: string | null
   taskTypeId?: string | null
   isStuck?: boolean
   stuckAt?: string | null

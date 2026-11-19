@@ -38,6 +38,7 @@ function overviewTaskToTask(
     domainEntityId: null,
     domainEntityType: null,
     hostEntityId: null,
+    projectId: null,
     isStuck: false,
     dueDateMoveCount: 'dueDateMoveCount' in row ? row.dueDateMoveCount : 0,
   }

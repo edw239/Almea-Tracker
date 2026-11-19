@@ -1,7 +1,8 @@
 import { cn } from './utils'
 import { buttonVariants } from '../components/ui/button'
 
-export const SEGMENT_TRACK = 'inline-flex rounded-full bg-surface overflow-hidden'
+/** No overflow-hidden: with flex-wrap, rounded-full + clip eats the first pill's top-left corner. */
+export const SEGMENT_TRACK = 'inline-flex rounded-full bg-surface'
 
 export const SEGMENT_ITEM =
   'inline-flex h-8 items-center rounded-full px-3 text-xs font-medium transition-colors'
@@ -25,6 +26,10 @@ export const TOOLBAR_CONTROL_GROUP =
 /** Applied filter shown in the toolbar. */
 export const FILTER_TOKEN =
   'animate-in fade-in-0 zoom-in-95 inline-flex h-8 max-w-full items-center rounded-full bg-accent-soft text-xs text-foreground'
+
+/** Icon-only control: glyph, no disc or border. */
+export const QUIET_ICON =
+  'inline-flex size-8 shrink-0 items-center justify-center bg-transparent p-0 text-muted-foreground transition-colors hover:bg-transparent hover:text-foreground'
 
 export const FILTER_TOKEN_REMOVE =
   'mr-1 inline-flex size-6 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-accent/15 focus-visible:outline-none focus-visible:shadow-[var(--focus-ring)]'

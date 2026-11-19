@@ -6,6 +6,7 @@ import { LoadErrorNotice } from '../components/LoadErrorNotice'
 import { PageHeader } from '../components/PageHeader'
 import { PageToolbar } from '../components/PageToolbar'
 import { Select } from '../components/Select'
+import { FavoriteButton, QuietClose } from '../components/QuietControls'
 import { TaskPanel } from '../components/TaskPanel'
 import { Avatars, QuickAdd, StatusChip, TaskRow } from '../components/ui'
 import { Button } from '../components/ui/button'
@@ -82,10 +83,23 @@ export function ListPage() {
   const [busy, setBusy] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
   const [statusEditorOpen, setStatusEditorOpen] = useState(false)
+  const [projectOptions, setProjectOptions] = useState<Array<{ id: string; name: string }>>([])
 
   const reportError = useCallback((error: unknown, fallback: string) => {
     setActionError(error instanceof ApiError ? error.message : fallback)
   }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    void api.projects().then((data) => {
+      if (!cancelled) setProjectOptions(data.items.map((item) => ({ id: item.id, name: item.name })))
+    }).catch((caught) => {
+      if (!cancelled) reportError(caught, 'Не удалось загрузить проекты')
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [reportError])
 
   const reloadExtras = useCallback(async (id: string) => {
     const [views, tpls, scheds] = await Promise.all([
@@ -384,9 +398,7 @@ export function ListPage() {
               Удалить вид
             </Button>
           ) : null}
-          <Button type="button" variant="ghost" size="compact" onClick={() => void store.toggleFavorite('TASK_LIST', list.id)}>
-            {starred ? 'В избранном' : 'В избранное'}
-          </Button>
+          <FavoriteButton active={starred} onClick={() => void store.toggleFavorite('TASK_LIST', list.id)} />
           <Button type="button" variant="ghost" size="compact" onClick={() => setStatusEditorOpen(true)}>
             Колонки
           </Button>
@@ -482,6 +494,17 @@ export function ListPage() {
                 ...store.users.map((user) => ({ value: user.id, label: user.name })),
               ]}
               onChange={(assigneeId) => setFilterDraft((prev) => ({ ...prev, assigneeId }))}
+            />
+            <Select
+              variant="toolbar"
+              aria-label="Проект"
+              value={filterDraft.projectId}
+              placeholder="Проект"
+              options={[
+                { value: '', label: 'Проект' },
+                ...projectOptions.map((project) => ({ value: project.id, label: project.name })),
+              ]}
+              onChange={(projectId) => setFilterDraft((prev) => ({ ...prev, projectId }))}
             />
             <input
               aria-label="Название"
@@ -807,11 +830,9 @@ function StatusEditorPanel({
 
   return (
     <div className="me-panel" style={{ margin: '0 24px 16px' }}>
-      <div className="group-h">
+      <div className="group-h items-center">
         <h2>Колонки списка</h2>
-        <button type="button" className="ghost" onClick={onClose}>
-          Закрыть
-        </button>
+        <QuietClose onClick={onClose} />
       </div>
       {error ? <p className="form-error">{error}</p> : null}
       <div className="card-list">

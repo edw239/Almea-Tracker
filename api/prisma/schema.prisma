@@ -13,6 +13,19 @@ enum UserRole {
   MEMBER
 }
 
+enum ProjectStatus {
+  DRAFT
+  ACTIVE
+  ON_HOLD
+  CLOSED
+}
+
+enum ProjectMemberRole {
+  SPONSOR
+  LEAD
+  CONTRIBUTOR
+}
+
 enum TaskStatus {
   OPEN
   IN_PROGRESS
@@ -159,6 +172,7 @@ model User {
   createdBy              User?                     @relation("UserProvisioner", fields: [createdByUserId], references: [id], onDelete: SetNull)
   provisionedUsers       User[]                    @relation("UserProvisioner")
   spaceMembers           TaskSpaceMember[]
+  projectMemberships     ProjectMember[]
   ownedTasks             Task[]                    @relation("TaskOwner")
   assignments            TaskAssignee[]
   watchers               TaskWatcher[]
@@ -276,7 +290,8 @@ model TaskList {
   templates         TaskTemplate[]
   schedules         TaskSchedule[]
   boardSources      BoardSource[]
-  defaultForBoards  Board[]          @relation("BoardDefaultList")
+  defaultForBoards      Board[]  @relation("BoardDefaultList")
+  coordinationProject   Project?
 
   @@unique([spaceId, systemKey])
   @@index([spaceId, position])
@@ -340,6 +355,7 @@ model Task {
   epicId           String?      @map("epic_id") @db.Uuid
   storyPoints      Decimal?     @map("story_points") @db.Decimal(5, 1)
   sprintId         String?      @map("sprint_id") @db.Uuid
+  projectId        String?      @map("project_id") @db.Uuid
   createdAt        DateTime     @default(now()) @map("created_at")
   updatedAt        DateTime     @updatedAt @map("updated_at")
 
@@ -367,6 +383,7 @@ model Task {
   statusTransitions TaskStatusTransition[]
   labels            TaskLabel[]
   sprint            Sprint?               @relation(fields: [sprintId], references: [id], onDelete: SetNull)
+  project           Project?              @relation(fields: [projectId], references: [id], onDelete: SetNull)
   sprintEvents      SprintEvent[]
 
   @@index([listId, deletedAt])
@@ -378,6 +395,7 @@ model Task {
   @@index([dueDate])
   @@index([domainEntityType, domainEntityId])
   @@index([hostEntityId])
+  @@index([projectId])
   @@index([reviewRequired, status])
   @@index([isStuck])
   @@index([taskTypeId])
@@ -404,6 +422,43 @@ model HostEntity {
   @@unique([entityType, nameKey])
   @@index([entityType, isArchived])
   @@map("host_entities")
+}
+
+/// Temporary commitment. Tasks stay in process spaces and point here.
+model Project {
+  id            String        @id @default(uuid()) @db.Uuid
+  name          String        @db.VarChar(200)
+  nameKey       String        @unique @map("name_key") @db.VarChar(200)
+  outcome       String?       @db.VarChar(2000)
+  startDate     DateTime?     @map("start_date") @db.Date
+  targetEndDate DateTime?     @map("target_end_date") @db.Date
+  status        ProjectStatus @default(DRAFT)
+  closedAt      DateTime?     @map("closed_at")
+  closeNote     String?       @map("close_note") @db.VarChar(2000)
+  listId        String?       @unique @map("list_id") @db.Uuid
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
+
+  list    TaskList?       @relation(fields: [listId], references: [id], onDelete: SetNull)
+  members ProjectMember[]
+  tasks   Task[]
+
+  @@index([status, targetEndDate])
+  @@map("projects")
+}
+
+model ProjectMember {
+  projectId String            @map("project_id") @db.Uuid
+  userId    String            @map("user_id") @db.Uuid
+  role      ProjectMemberRole
+  createdAt DateTime          @default(now()) @map("created_at")
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([projectId, userId])
+  @@index([userId])
+  @@map("project_members")
 }
 
 model TaskNotification {

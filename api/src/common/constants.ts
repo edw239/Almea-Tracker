@@ -1,6 +1,8 @@
 export const SYSTEM_SPACE_PERSONAL = 'personal';
 export const SYSTEM_LIST_PERSONAL_INBOX = 'personal-inbox';
 export const SYSTEM_SPACE_HOST = 'host';
+/** Coordination lists only. Execution stays in process spaces. */
+export const SYSTEM_SPACE_PROJECTS = 'projects';
 
 export const HOST_ENTITY_TYPES = ['brand', 'batch', 'deal', 'project'] as const;
 export type HostEntityType = (typeof HOST_ENTITY_TYPES)[number];
@@ -8,6 +10,12 @@ export type HostEntityType = (typeof HOST_ENTITY_TYPES)[number];
 export const HOST_ENTITY_TYPES_VISIBLE = ['brand'] as const;
 export type HostEntityTypeVisible = (typeof HOST_ENTITY_TYPES_VISIBLE)[number];
 export const HOST_ENTITY_NAME_MAX_LENGTH = 200;
+export const PROJECT_NAME_MAX_LENGTH = 200;
+export const PROJECT_TEXT_MAX_LENGTH = 2000;
+export const PROJECT_DUE_SOON_DAYS = 7;
+export const PROJECT_CONTRIBUTORS_MAX = 50;
+export const PROJECT_LIST_MAX = 100;
+export const PROJECT_TASK_PAGE = 200;
 export const HOST_ENTITIES_PAGE_DEFAULT = 50;
 export const HOST_ENTITIES_PAGE_MAX = 100;
 
@@ -103,4 +111,5 @@ export const KNOWN_SPACE_KEYS: Record<string, string> = {
   ops: 'OPS',
   personal: 'ME',
   host: 'BR',
+  projects: 'PRJ',
 };

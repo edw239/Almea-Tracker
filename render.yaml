@@ -41,7 +41,7 @@ services:
       - key: SEED_ADMIN_EMAIL
         value: admin@almea.ru
       - key: SEED_ADMIN_NAME
-        value: Эдуард
+        value: Эдвард
       - key: SEED_ADMIN_PASSWORD
         value: passswordds
       - key: DATABASE_URL
@@ -84,7 +84,7 @@ services:
       - key: SEED_ADMIN_EMAIL
         value: admin@almea.ru
       - key: SEED_ADMIN_NAME
-        value: Эдуард
+        value: Эдвард
       - key: SEED_ADMIN_PASSWORD
         value: passswordds
       - key: DATABASE_URL

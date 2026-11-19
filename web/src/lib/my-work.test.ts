@@ -24,6 +24,7 @@ function task(partial: Partial<Task> & Pick<Task, 'id'>): Task {
     domainEntityId: null,
     domainEntityType: null,
     hostEntityId: null,
+    projectId: null,
     reviewRequired: false,
     submittedAt: null,
     ...partial,

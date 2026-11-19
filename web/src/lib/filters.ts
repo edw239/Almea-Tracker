@@ -5,6 +5,7 @@ export type FilterDraft = {
   priority: TaskPriority | ''
   assigneeId: string
   title: string
+  projectId: string
 }
 
 export const EMPTY_FILTER: FilterDraft = {
@@ -12,6 +13,7 @@ export const EMPTY_FILTER: FilterDraft = {
   priority: '',
   assigneeId: '',
   title: '',
+  projectId: '',
 }
 
 type FilterCondition = { field: string; operator: string; value?: unknown }
@@ -33,12 +35,15 @@ export function buildListFilters(draft: FilterDraft): string | undefined {
   if (title) {
     children.push({ field: 'title', operator: 'contains', value: title })
   }
+  if (draft.projectId) {
+    children.push({ field: 'project_id', operator: 'is', value: draft.projectId })
+  }
   if (children.length === 0) return undefined
   return JSON.stringify({ op: 'AND', children })
 }
 
 export function hasActiveFilters(draft: FilterDraft): boolean {
-  return Boolean(draft.status || draft.priority || draft.assigneeId || draft.title.trim())
+  return Boolean(draft.status || draft.priority || draft.assigneeId || draft.title.trim() || draft.projectId)
 }
 
 /** Serializes saved-view filters Json for listTasks query. */
@@ -74,6 +79,9 @@ export function parseFiltersToDraft(filters: unknown): FilterDraft {
     }
     if (condition.field === 'title' && typeof condition.value === 'string') {
       draft.title = condition.value
+    }
+    if (condition.field === 'project_id' && typeof condition.value === 'string') {
+      draft.projectId = condition.value
     }
   }
   return draft

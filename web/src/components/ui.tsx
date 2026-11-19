@@ -157,13 +157,22 @@ export function QuickAdd({
   const [assigneeId, setAssigneeId] = useState('')
   const [dueDate, setDueDate] = useState('')
   const [brandId, setBrandId] = useState('')
+  const [projectId, setProjectId] = useState('')
   const [brands, setBrands] = useState<Array<{ id: string; name: string }>>([])
+  const [projects, setProjects] = useState<Array<{ id: string; name: string }>>([])
 
   useEffect(() => {
     let cancelled = false
     void api.hostEntities({ type: 'brand' }).then((rows) => {
       if (!cancelled) setBrands(rows.map((row) => ({ id: row.id, name: row.name })))
     })
+    void api.projects()
+      .then((data) => {
+        if (!cancelled) setProjects(data.items.map((row) => ({ id: row.id, name: row.name })))
+      })
+      .catch((caught) => {
+        if (!cancelled) setError(caught instanceof ApiError ? caught.message : 'Не удалось загрузить проекты')
+      })
     return () => {
       cancelled = true
     }
@@ -174,6 +183,7 @@ export function QuickAdd({
     setAssigneeId('')
     setDueDate('')
     setBrandId('')
+    setProjectId('')
     setError(null)
   }
 
@@ -193,6 +203,7 @@ export function QuickAdd({
         assigneeIds: assigneeId ? [assigneeId] : [],
         dueDate: dueDate || null,
         hostEntityId: brandId || null,
+        projectId: projectId || null,
       })
       reset()
       onCreated?.(task.id)
@@ -256,6 +267,18 @@ export function QuickAdd({
           ...brands.map((brand) => ({ value: brand.id, label: brand.name })),
         ]}
         onChange={setBrandId}
+      />
+      <Select
+        variant="inline"
+        aria-label="Проект"
+        value={projectId}
+        disabled={pending}
+        placeholder="Проект"
+        options={[
+          { value: '', label: 'Проект' },
+          ...projects.map((project) => ({ value: project.id, label: project.name })),
+        ]}
+        onChange={setProjectId}
       />
       <Button type="submit" size="sm" disabled={pending}>
         {pending ? '…' : 'Добавить'}

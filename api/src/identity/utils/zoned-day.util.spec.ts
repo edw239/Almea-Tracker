@@ -1,4 +1,4 @@
-import { startOfZonedDay, summaryDayBounds, zonedDayStartUtc } from './zoned-day.util';
+import { startOfZonedDay, summaryDayBounds, zonedCalendarDate, zonedDayStartUtc } from './zoned-day.util';
 
 describe('zoned-day', () => {
   it('resolves Asia/Dubai midnight for a known UTC instant', () => {
@@ -20,6 +20,12 @@ describe('zoned-day', () => {
     expect(bounds.todayStart.toISOString()).toBe('2026-08-18T00:00:00.000Z');
     expect(bounds.tomorrowStart.toISOString()).toBe('2026-08-19T00:00:00.000Z');
     expect(bounds.weekEnd.toISOString()).toBe('2026-08-25T00:00:00.000Z');
+  });
+
+  it('formats the calendar date in the zone', () => {
+    const now = new Date('2026-08-18T20:30:00.000Z');
+    expect(zonedCalendarDate(now, 'Asia/Dubai')).toBe('2026-08-19');
+    expect(zonedCalendarDate(now, 'UTC')).toBe('2026-08-18');
   });
 
   it('zonedDayStartUtc matches startOfZonedDay', () => {

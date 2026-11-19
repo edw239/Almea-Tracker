@@ -1,5 +1,4 @@
-import { Injectable } from '@nestjs/common';
-import { HttpStatus } from '@nestjs/common';
+import { HttpStatus, Injectable } from '@nestjs/common';
 import {
   BoardCardColor,
   BoardSwimlane,
@@ -10,6 +9,7 @@ import {
   TaskSpaceMemberRole,
   TaskStatus,
 } from '@prisma/client';
+import { isUUID } from 'class-validator';
 import {
   BOARD_CARD_FIELDS_MAX,
   BOARD_DONE_HIDE_DAYS,
@@ -232,7 +232,7 @@ export class BoardsService {
   async view(
     user: AuthUser,
     boardId: string,
-    query: { q?: string; mine?: boolean; recent?: boolean; quick?: string; assigneeId?: string },
+    query: { q?: string; mine?: boolean; recent?: boolean; quick?: string; assigneeId?: string; projectId?: string },
   ) {
     const board = await this.load(user, boardId);
     const listIds = await this.access.listIdsFor(board.sources);
@@ -247,6 +247,12 @@ export class BoardsService {
     }
     if (query.mine) and.push({ assignees: { some: { userId: user.id } } });
     if (query.assigneeId) and.push({ assignees: { some: { userId: query.assigneeId } } });
+    if (query.projectId) {
+      if (!isUUID(query.projectId)) {
+        throw AppError.badRequest('Некорректный проект');
+      }
+      and.push({ projectId: query.projectId });
+    }
     if (query.recent) {
       and.push({ updatedAt: { gt: new Date(Date.now() - BOARD_RECENT_HOURS * 3_600_000) } });
     }

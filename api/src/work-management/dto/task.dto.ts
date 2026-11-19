@@ -40,6 +40,11 @@ export class CreateTaskDto {
   hostEntityId?: string | null;
 
   @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsUUID()
+  projectId?: string | null;
+
+  @IsOptional()
   @IsUUID()
   listStatusId?: string;
 
@@ -135,6 +140,11 @@ export class UpdateTaskDto {
   @ValidateIf((_, value) => value !== null)
   @IsUUID()
   hostEntityId?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsUUID()
+  projectId?: string | null;
 
   @IsOptional()
   @ValidateIf((_, value) => value !== null)

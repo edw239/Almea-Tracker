@@ -2,10 +2,11 @@ import type { LucideIcon } from '../lib/icons'
 import {
   BriefcaseBusiness,
   Building2,
+  Target,
   Clock,
+  Heart,
   Inbox,
   LayoutGrid,
-  Star,
   Users,
 } from '../lib/icons'
 
@@ -65,7 +66,7 @@ export const NAV_SECTIONS: NavSection[] = [
       {
         to: '/favorites',
         label: 'Избранное',
-        icon: Star,
+        icon: Heart,
         roles: [],
       },
     ],
@@ -77,6 +78,12 @@ export const NAV_SECTIONS: NavSection[] = [
         to: '/boards',
         label: 'Доски',
         icon: LayoutGrid,
+        roles: [],
+      },
+      {
+        to: '/projects',
+        label: 'Проекты',
+        icon: Target,
         roles: [],
       },
       {

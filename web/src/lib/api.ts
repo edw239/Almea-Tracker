@@ -1,3 +1,4 @@
+import type { ProjectSignalName, ProjectStatusName } from './project'
 import type { FavoriteEntityType, TaskPriority, TaskStatus, ViewType } from '../types'
 import type { AccountRole } from './account-role'
 import type { ApiListStatus, ApiSpace, ApiTask } from './mappers'
@@ -217,6 +218,7 @@ export type TaskPatch = {
   domainEntityType?: string | null
   domainLabel?: string | null
   hostEntityId?: string | null
+  projectId?: string | null
   reviewRequired?: boolean
   reviewRejectReason?: string
   taskTypeId?: string | null
@@ -233,6 +235,56 @@ export type MovePatch = {
   afterTaskId?: string | null
   position?: number
   reviewRejectReason?: string
+}
+
+export type ProjectPerson = { id: string; name: string }
+
+export type ProjectSummary = {
+  id: string
+  name: string
+  outcome: string | null
+  startDate: string | null
+  targetEndDate: string | null
+  status: ProjectStatusName
+  closedAt: string | null
+  closeNote: string | null
+  listId: string | null
+  createdAt: string
+  updatedAt: string
+  openTaskCount: number
+  signal: ProjectSignalName | null
+  lead: ProjectPerson | null
+}
+
+export type ProjectTaskRow = {
+  id: string
+  title: string
+  status: TaskStatus
+  dueDate: string | null
+  listId: string
+  listName: string
+  spaceId: string
+  spaceName: string
+}
+
+export type ProjectDetail = ProjectSummary & {
+  sponsor: ProjectPerson | null
+  contributors: ProjectPerson[]
+  canManage: boolean
+  list: { id: string; name: string } | null
+  truncated: boolean
+  tasks: ProjectTaskRow[]
+}
+
+export type ProjectWriteBody = {
+  name?: string
+  outcome?: string | null
+  startDate?: string | null
+  targetEndDate?: string | null
+  status?: 'DRAFT' | 'ACTIVE' | 'ON_HOLD'
+  leadUserId?: string | null
+  sponsorUserId?: string | null
+  contributorIds?: string[]
 }
 
 export type ListTasksPage = {
@@ -348,6 +400,7 @@ export const api = {
       assigneeIds?: string[]
       dueDate?: string | null
       hostEntityId?: string | null
+      projectId?: string | null
     },
   ) =>
     request<ApiTask>(`/api/task-lists/${listId}/tasks`, {
@@ -657,6 +710,24 @@ export const api = {
   searchLabels: (query: string) => request<Array<{ id: string; name: string }>>(`/api/labels?query=${encodeURIComponent(query)}`),
   createLabel: (name: string) =>
     request<{ id: string; name: string }>('/api/labels', { method: 'POST', body: JSON.stringify({ name }) }),
+  projects: (opts?: { query?: string; includeClosed?: boolean }) => {
+    const q = new URLSearchParams()
+    if (opts?.query) q.set('query', opts.query)
+    if (opts?.includeClosed) q.set('includeClosed', 'true')
+    const suffix = q.toString() ? `?${q}` : ''
+    return request<{ items: ProjectSummary[]; truncated: boolean }>(`/api/projects${suffix}`)
+  },
+  project: (id: string) => request<ProjectDetail>(`/api/projects/${id}`),
+  createProject: (body: ProjectWriteBody & { name: string }) =>
+    request<ProjectDetail>('/api/projects', { method: 'POST', body: JSON.stringify(body) }),
+  updateProject: (id: string, body: ProjectWriteBody) =>
+    request<ProjectDetail>(`/api/projects/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  closeProject: (id: string, closeNote: string) =>
+    request<ProjectDetail>(`/api/projects/${id}/close`, {
+      method: 'POST',
+      body: JSON.stringify({ closeNote }),
+    }),
+  reopenProject: (id: string) => request<ProjectDetail>(`/api/projects/${id}/reopen`, { method: 'POST' }),
   createTaskType: (spaceId: string, body: { key: string; name: string; color?: string }) =>
     request<{ id: string; key: string; name: string }>(`/api/task-spaces/${spaceId}/task-types`, {
       method: 'POST',

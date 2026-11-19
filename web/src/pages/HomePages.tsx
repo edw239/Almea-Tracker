@@ -4,6 +4,7 @@ import { EmptyState } from '../components/EmptyState'
 import { LoadErrorNotice } from '../components/LoadErrorNotice'
 import { PageHeader } from '../components/PageHeader'
 import { PageToolbar } from '../components/PageToolbar'
+import { FavoriteButton } from '../components/QuietControls'
 import { StatCard, StatTiles } from '../components/StatCard'
 import { QuickAdd, TaskRow } from '../components/ui'
 import { Button } from '../components/ui/button'
@@ -11,7 +12,7 @@ import { CardSkeleton } from '../components/ui/Skeleton'
 import type { MyWorkScope } from '../lib/api'
 import { SEGMENT_TRACK, segmentItemClass } from '../lib/control-styles'
 import { isOverdue } from '../lib/format'
-import { Bell, Flame, Inbox, ListTodo, Star } from '../lib/icons'
+import { Bell, Flame, Heart, Inbox, ListTodo } from '../lib/icons'
 import { cn } from '../lib/utils'
 import { useStore } from '../store'
 import type { Task } from '../types'
@@ -239,7 +240,7 @@ export function FavoritesPage() {
       <PageHeader overline="Favorites" title="Закреплено" />
       {empty ? (
         <EmptyState
-          icon={Star}
+          icon={Heart}
           title="Избранное пусто"
           description="Закрепите список или задачу из карточки или списка."
         />
@@ -248,14 +249,20 @@ export function FavoritesPage() {
           {lists.length > 0 ? (
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {lists.map((list) => (
-                <Link
+                <div
                   key={list.id}
-                  to={`/lists/${list.id}`}
-                  className="surface-card block rounded p-4 transition-colors hover:bg-elevated"
+                  className="surface-card relative rounded transition-colors hover:bg-elevated"
                 >
-                  <h3 className="font-medium text-foreground">{list.name}</h3>
-                  <p className="mt-1 text-sm text-muted-foreground">Избранный список</p>
-                </Link>
+                  <Link to={`/lists/${list.id}`} className="block p-4 pr-12">
+                    <h3 className="font-medium text-foreground">{list.name}</h3>
+                    <p className="mt-1 text-sm text-muted-foreground">Избранный список</p>
+                  </Link>
+                  <FavoriteButton
+                    active
+                    className="absolute right-2 top-2"
+                    onClick={() => void store.toggleFavorite('TASK_LIST', list.id)}
+                  />
+                </div>
               ))}
             </div>
           ) : null}

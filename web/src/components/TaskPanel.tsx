@@ -1,7 +1,7 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../auth'
-import { ApiError, api } from '../lib/api'
+import { ApiError, api, type ProjectSummary } from '../lib/api'
 import type { SprintRow } from '../lib/board-types'
 import { formatDateTime, PRIORITY_LABEL } from '../lib/format'
 import { loadSpaceEpics, loadSpaceSprints, type EpicOption } from '../lib/space-catalog'
@@ -11,12 +11,12 @@ import type { Task } from '../types'
 import { chipClass } from '../lib/control-styles'
 import { CollapsibleSection } from './CollapsibleSection'
 import { DatePicker } from './DatePicker'
+import { FavoriteButton, QuietClose } from './QuietControls'
 import { Select } from './Select'
 import { MentionText } from './ui'
 import { Button } from './ui/button'
 import { FormNotice } from './ui/form-notice'
 import { Input } from './ui/input'
-import { X } from '../lib/icons'
 
 export function TaskPanel({ task, onClose }: { task: Task; onClose?: () => void }) {
   const store = useStore()
@@ -48,6 +48,7 @@ export function TaskPanel({ task, onClose }: { task: Task; onClose?: () => void 
   const inProgressColumn = statuses.find((item) => item.name === 'В работе')
   const doneColumn = statuses.find((item) => item.category === 'DONE')
   const [title, setTitle] = useState(task.title)
+  const titleRef = useRef<HTMLTextAreaElement>(null)
   const [description, setDescription] = useState(task.description)
   const [comment, setComment] = useState('')
   const [checkText, setCheckText] = useState('')
@@ -55,6 +56,7 @@ export function TaskPanel({ task, onClose }: { task: Task; onClose?: () => void 
   const [stuckReason, setStuckReason] = useState('')
   const [stuckError, setStuckError] = useState<string | null>(null)
   const [brands, setBrands] = useState<Array<{ id: string; name: string }>>([])
+  const [projects, setProjects] = useState<ProjectSummary[]>([])
   const [taskTypes, setTaskTypes] = useState<Array<{ id: string; name: string }>>([])
   const [statusError, setStatusError] = useState<string | null>(null)
 
@@ -63,11 +65,27 @@ export function TaskPanel({ task, onClose }: { task: Task; onClose?: () => void 
     setDescription(task.description)
   }, [task.description, task.id, task.title])
 
+  useLayoutEffect(() => {
+    const element = titleRef.current
+    if (!element) return
+    element.style.height = 'auto'
+    element.style.height = `${element.scrollHeight}px`
+  }, [title])
+
   useEffect(() => {
     let cancelled = false
     void api.hostEntities({ type: 'brand' }).then((rows) => {
       if (!cancelled) setBrands(rows.map((row) => ({ id: row.id, name: row.name })))
     })
+    void api.projects({ includeClosed: true })
+      .then((data) => {
+        if (!cancelled) setProjects(data.items)
+      })
+      .catch((caught) => {
+        if (!cancelled) {
+          setStatusError(caught instanceof ApiError ? caught.message : 'Не удалось загрузить проекты')
+        }
+      })
     return () => {
       cancelled = true
     }
@@ -140,56 +158,53 @@ export function TaskPanel({ task, onClose }: { task: Task; onClose?: () => void 
 
   return (
     <aside className="panel sticky top-0 h-screen overflow-y-auto border-l border-border bg-surface px-5 py-6 scrollbar-subtle">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <p className="label-overline mb-1">
-            {task.key ? `${task.key} · ` : ''}
-            {list?.name}
-          </p>
-          <input
-            className="w-full border-0 bg-transparent font-display text-[1.375rem] font-medium leading-tight tracking-[-0.03em] text-foreground outline-none focus:shadow-none"
-            value={title}
-            aria-label="Название"
-            onChange={(event) => setTitle(event.target.value)}
-            onBlur={() => {
-              const next = title.trim()
-              if (!next) {
-                setTitle(task.title)
-                return
-              }
-              if (next !== task.title) void store.patchTask(task.id, { title: next })
-            }}
-          />
-          {blocked ? <p className="blocked">Заблокирована входящей связью BLOCKS</p> : null}
-          {task.isStuck ? (
-            <p className="blocked">
-              Застряла{task.stuckReason ? `: ${task.stuckReason}` : ''}
-              {task.stuckAt ? ` · ${formatDateTime(task.stuckAt)}` : ''}
-            </p>
-          ) : null}
-          {brandHref && task.domainLabel ? (
-            <p className="page-lead">
-              Бренд: <Link to={brandHref}>{task.domainLabel}</Link>
-            </p>
-          ) : null}
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
-          <Button type="button" variant="ghost" size="compact" onClick={() => void store.toggleFavorite('TASK', task.id)}>
-            {favorite ? 'В избранном' : 'В избранное'}
-          </Button>
+      <div className="mb-1 flex items-start justify-between gap-3">
+        <p className="label-overline min-w-0 flex-1">
+          {task.key ? `${task.key} · ` : ''}
+          {list?.name}
+        </p>
+        <div className="flex shrink-0 items-center">
+          <FavoriteButton active={favorite} onClick={() => void store.toggleFavorite('TASK', task.id)} />
           {onClose ? (
-            <Button type="button" variant="outline" size="icon" className="size-9" onClick={onClose} aria-label="Закрыть">
-              <X size={16} />
-            </Button>
+            <QuietClose onClick={onClose} />
           ) : (
-            <Button type="button" variant="outline" size="icon" className="size-9" asChild>
-              <Link to={`/lists/${task.listId}`} aria-label="К списку">
-                <X size={16} />
-              </Link>
-            </Button>
+            <QuietClose to={`/lists/${task.listId}`} label="К списку" />
           )}
         </div>
       </div>
+      <textarea
+        ref={titleRef}
+        rows={1}
+        className="w-full resize-none overflow-hidden border-0 bg-transparent p-0 font-display text-[length:calc(1.375rem*var(--canvas-scale))] font-medium leading-tight tracking-[-0.03em] text-foreground outline-none focus:shadow-none"
+        value={title}
+        aria-label="Название"
+        onChange={(event) => setTitle(event.target.value.replace(/[\r\n]+/g, ' '))}
+        onKeyDown={(event) => {
+          if (event.key !== 'Enter') return
+          event.preventDefault()
+          event.currentTarget.blur()
+        }}
+        onBlur={() => {
+          const next = title.trim()
+          if (!next) {
+            setTitle(task.title)
+            return
+          }
+          if (next !== task.title) void store.patchTask(task.id, { title: next })
+        }}
+      />
+      {blocked ? <p className="blocked">Заблокирована входящей связью BLOCKS</p> : null}
+      {task.isStuck ? (
+        <p className="blocked">
+          Застряла{task.stuckReason ? `: ${task.stuckReason}` : ''}
+          {task.stuckAt ? ` · ${formatDateTime(task.stuckAt)}` : ''}
+        </p>
+      ) : null}
+      {brandHref && task.domainLabel ? (
+        <p className="page-lead">
+          Бренд: <Link to={brandHref}>{task.domainLabel}</Link>
+        </p>
+      ) : null}
 
       <div className="row-2">
         <div className="field">
@@ -438,6 +453,36 @@ export function TaskPanel({ task, onClose }: { task: Task; onClose?: () => void 
           </div>
         </div>
       ) : null}
+
+      <div className="field">
+        <label htmlFor={`project-${task.id}`}>Проект</label>
+        <Select
+          id={`project-${task.id}`}
+          value={task.projectId ?? ''}
+          placeholder="Без проекта"
+          disabled={projects.find((item) => item.id === task.projectId)?.status === 'CLOSED'}
+          options={[
+            { value: '', label: 'Без проекта' },
+            ...projects
+              .filter((item) => item.status !== 'CLOSED' || item.id === task.projectId)
+              .map((item) => ({
+                value: item.id,
+                label: item.status === 'CLOSED' ? `${item.name} (закрыт)` : item.name,
+              })),
+          ]}
+          onChange={(projectId) => {
+            setStatusError(null)
+            void store.patchTask(task.id, { projectId: projectId ? projectId : null }).catch((caught) => {
+              setStatusError(caught instanceof ApiError ? caught.message : 'Не удалось привязать проект')
+            })
+          }}
+        />
+        {task.projectId ? (
+          <Link className="text-sm text-link hover:underline" to={`/projects/${task.projectId}`}>
+            Карточка проекта
+          </Link>
+        ) : null}
+      </div>
 
       <div className="field">
         <label htmlFor={`brand-${task.id}`}>Бренд</label>

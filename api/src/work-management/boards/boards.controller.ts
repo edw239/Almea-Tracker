@@ -282,6 +282,7 @@ export class BoardsController {
     @Query('recent') recent?: string,
     @Query('quick') quick?: string,
     @Query('assigneeId') assigneeId?: string,
+    @Query('projectId') projectId?: string,
   ) {
     return this.boards.view(user, boardId, {
       q,
@@ -289,6 +290,7 @@ export class BoardsController {
       recent: recent === '1' || recent === 'true',
       quick,
       assigneeId,
+      projectId,
     });
   }
 

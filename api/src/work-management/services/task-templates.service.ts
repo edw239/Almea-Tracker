@@ -11,6 +11,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { TaskSpaceAccessService } from '../access/task-space-access.service';
 import { nextPosition } from '../utils/task-position.util';
 import { parseTemplateItems, type TemplateItem } from '../utils/task-template.util';
+import { ProjectsService } from './projects.service';
 import { TaskListStatusesService } from './task-list-statuses.service';
 import { TaskIdentityService } from './task-identity.service';
 import { TaskStatusService } from './task-status.service';
@@ -24,6 +25,7 @@ export class TaskTemplatesService {
     private readonly statuses: TaskListStatusesService,
     private readonly identity: TaskIdentityService,
     private readonly taskStatus: TaskStatusService,
+    private readonly projects: ProjectsService,
   ) {}
 
   async listForList(user: AuthUser, listId: string) {
@@ -126,6 +128,13 @@ export class TaskTemplatesService {
     let position = last?.position ?? 0;
 
     return this.prisma.$transaction(async (tx) => {
+      const linked = await this.projects.resolveLink(tx, {
+        mode: 'create',
+        listId: input.listId,
+        currentProjectId: null,
+        requested: undefined,
+      });
+      const projectId = linked ?? null;
       const created = [];
       for (const item of items) {
         position = nextPosition(position);
@@ -138,6 +147,7 @@ export class TaskTemplatesService {
           listStatusId: open?.id ?? null,
           position,
           parentTaskId: null,
+          projectId,
         });
         created.push(task);
         for (const sub of item.subtasks ?? []) {
@@ -151,6 +161,7 @@ export class TaskTemplatesService {
             listStatusId: open?.id ?? null,
             position,
             parentTaskId: task.id,
+            projectId,
           });
         }
       }
@@ -181,6 +192,7 @@ export class TaskTemplatesService {
       listStatusId: string | null;
       position: number;
       parentTaskId: string | null;
+      projectId: string | null;
     },
   ) {
     const title = input.item.title.trim().slice(0, TITLE_MAX_LENGTH);
@@ -207,6 +219,7 @@ export class TaskTemplatesService {
         key,
         rank,
         statusChangedAt: at,
+        projectId: input.projectId,
         assignees: { create: { userId: input.assigneeUserId } },
         checklist: input.item.checklist?.length
           ? {

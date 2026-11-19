@@ -30,6 +30,8 @@ export function CreateIssueDialog({
   const [epicId, setEpicId] = useState('')
   const [label, setLabel] = useState('')
   const [brandId, setBrandId] = useState('')
+  const [projectId, setProjectId] = useState('')
+  const [projects, setProjects] = useState<Array<{ id: string; name: string }>>([])
   const [error, setError] = useState<string | null>(null)
   const [types, setTypes] = useState<Array<{ id: string; name: string }>>([])
   const [typeId, setTypeId] = useState('')
@@ -56,6 +58,10 @@ export function CreateIssueDialog({
 
   useEffect(() => {
     void api.hostEntities({ type: 'brand' }).then((rows) => setBrands(rows.map((row) => ({ id: row.id, name: row.name }))))
+    void api
+      .projects()
+      .then((data) => setProjects(data.items.map((row) => ({ id: row.id, name: row.name }))))
+      .catch((caught) => setError(caught instanceof ApiError ? caught.message : 'Не удалось загрузить проекты'))
   }, [])
 
   useEffect(() => {
@@ -78,6 +84,7 @@ export function CreateIssueDialog({
         assigneeIds: assigneeId ? [assigneeId] : undefined,
         dueDate: dueDate || null,
         hostEntityId: brandId || null,
+        projectId: projectId || null,
       })
       if (typeId || epicId || storyPoints || labelIds || sprintId) {
         await store.patchTask(task.id, {
@@ -181,6 +188,13 @@ export function CreateIssueDialog({
             placeholder="Бренд"
             options={[{ value: '', label: 'Без бренда' }, ...brands.map((brand) => ({ value: brand.id, label: brand.name }))]}
             onChange={setBrandId}
+          />
+          <Select
+            aria-label="Проект"
+            value={projectId}
+            placeholder="Проект"
+            options={[{ value: '', label: 'Без проекта' }, ...projects.map((project) => ({ value: project.id, label: project.name }))]}
+            onChange={setProjectId}
           />
           <Button type="submit">Создать</Button>
         </form>
