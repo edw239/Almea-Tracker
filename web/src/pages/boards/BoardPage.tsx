@@ -4,6 +4,7 @@ import { BoardCanvas } from '../../components/board/BoardCanvas'
 import { CreateIssueDialog } from '../../components/board/CreateIssueDialog'
 import { PageHeader } from '../../components/PageHeader'
 import { TaskPanel } from '../../components/TaskPanel'
+import { Select } from '../../components/Select'
 import { Button } from '../../components/ui/button'
 import { Input } from '../../components/ui/input'
 import { ApiError, api } from '../../lib/api'
@@ -24,6 +25,9 @@ export function BoardPage() {
   const [recent, setRecent] = useState(false)
   const [quick, setQuick] = useState('')
   const [assigneeId, setAssigneeId] = useState('')
+  const [projectId, setProjectId] = useState('')
+  const [projects, setProjects] = useState<Array<{ id: string; name: string }>>([])
+  const [projectsError, setProjectsError] = useState<string | null>(null)
   const [collapsed, setCollapsed] = useState<string[]>([])
   const [createOpen, setCreateOpen] = useState(false)
   const [help, setHelp] = useState(false)
@@ -42,13 +46,31 @@ export function BoardPage() {
         recent: recent ? '1' : undefined,
         quick: quick || undefined,
         assigneeId: assigneeId || undefined,
+        projectId: projectId || undefined,
       })
       setView(next)
       setError(null)
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : 'Не удалось открыть доску')
     }
-  }, [assigneeId, boardId, mine, query, quick, recent])
+  }, [assigneeId, boardId, mine, projectId, query, quick, recent])
+
+  useEffect(() => {
+    let cancelled = false
+    void api.projects().then((data) => {
+      if (!cancelled) {
+        setProjects(data.items.map((item) => ({ id: item.id, name: item.name })))
+        setProjectsError(null)
+      }
+    }).catch((caught) => {
+      if (!cancelled) {
+        setProjectsError(caught instanceof ApiError ? caught.message : 'Не удалось загрузить проекты')
+      }
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   useEffect(() => {
     void load()
@@ -171,9 +193,18 @@ export function BoardPage() {
           }
         />
         {error ? <p className="text-sm text-destructive">{error}</p> : null}
+        {projectsError ? <p className="text-sm text-destructive">{projectsError}</p> : null}
         {view?.truncated ? <p className="text-sm text-muted-foreground">Показаны не все карточки.</p> : null}
         <div className="flex flex-wrap items-center gap-2">
           <Input id="board-search" placeholder="Поиск" value={query} onChange={(event) => setQuery(event.target.value)} className="max-w-xs" />
+          <Select
+            variant="toolbar"
+            aria-label="Проект"
+            value={projectId}
+            placeholder="Проект"
+            options={[{ value: '', label: 'Проект' }, ...projects.map((project) => ({ value: project.id, label: project.name }))]}
+            onChange={setProjectId}
+          />
           <Button type="button" variant={mine ? 'secondary' : 'ghost'} size="compact" onClick={() => setMine((value) => !value)}>
             Только мои задачи
           </Button>

@@ -80,6 +80,7 @@ export type ApiTask = {
   domainEntityType?: string | null
   domainLabel?: string | null
   hostEntityId?: string | null
+  projectId?: string | null
   reviewRequired?: boolean
   submittedAt?: string | null
   taskTypeId?: string | null
@@ -173,6 +174,7 @@ export function mapApiTask(row: ApiTask): Task {
     domainEntityId: row.domainEntityId ?? null,
     domainEntityType: row.domainEntityType ?? null,
     hostEntityId: row.hostEntityId ?? null,
+    projectId: row.projectId ?? null,
     taskTypeId: row.taskTypeId ?? null,
     isStuck: Boolean(row.isStuck),
     stuckAt: row.stuckAt ?? null,

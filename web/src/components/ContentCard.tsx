@@ -25,7 +25,7 @@ export function CardSectionTitle({
   return (
     <div className="mb-6 flex items-start justify-between gap-4">
       <div>
-        <h2 className="font-display text-[1.25rem] font-medium leading-tight tracking-[-0.03em] text-foreground">
+        <h2 className="font-display text-xl font-medium leading-tight tracking-[-0.03em] text-foreground">
           {title}
         </h2>
         {description ? <p className="mt-1.5 text-sm text-muted-foreground">{description}</p> : null}

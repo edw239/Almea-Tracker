@@ -12,7 +12,7 @@ interface StatCardProps {
 
 /** Compact square KPI tile — keep in sync with StatCardSkeleton. */
 export const STAT_TILE_CLASS =
-  'surface-card flex aspect-square w-[9.5rem] shrink-0 flex-col overflow-hidden p-3.5'
+  'surface-card flex aspect-square w-38 shrink-0 flex-col overflow-hidden p-3.5'
 
 export function StatTiles({ children }: { children: ReactNode }): ReactElement {
   return <div className="flex flex-wrap gap-3">{children}</div>
@@ -29,7 +29,7 @@ export function StatCard({
     <div className={STAT_TILE_CLASS}>
       <div className="flex items-start justify-between gap-1.5">
         <p
-          className="min-w-0 text-[0.625rem] font-medium uppercase leading-tight tracking-[0.12em] text-subtle-foreground"
+          className="min-w-0 text-[length:calc(0.625rem*var(--canvas-scale))] font-medium uppercase leading-tight tracking-[0.12em] text-subtle-foreground"
           title={title}
         >
           {title}
@@ -37,7 +37,7 @@ export function StatCard({
         {change ? (
           <span
             className={cn(
-              'inline-flex shrink-0 items-center rounded-full px-1.5 py-0.5 text-[0.6rem] font-medium uppercase tracking-wider',
+              'inline-flex shrink-0 items-center rounded-full px-1.5 py-0.5 text-[length:calc(0.6rem*var(--canvas-scale))] font-medium uppercase tracking-wider',
               isPositive ? 'bg-success/10 text-success' : 'bg-destructive/10 text-destructive',
             )}
           >
@@ -53,7 +53,7 @@ export function StatCard({
         )}
       </div>
       <p
-        className="mt-auto truncate font-display text-[1.75rem] leading-none tracking-[-0.03em] text-foreground"
+        className="mt-auto truncate font-display text-[length:calc(1.75rem*var(--canvas-scale))] leading-none tracking-[-0.03em] text-foreground"
         title={value}
       >
         {value}

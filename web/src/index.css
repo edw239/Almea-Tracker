@@ -44,6 +44,7 @@
 
   --color-destructive: var(--danger);
   --color-destructive-foreground: #ffffff;
+  --color-like: var(--like);
 
   --color-success: var(--success);
   --color-warning: var(--warning);
@@ -113,6 +114,8 @@
   --warning: #8a6a1a;
   --danger: #a33b32;
   --danger-soft: #f3e4e1;
+  /* Like is separate from danger so a filled heart does not read as an error. */
+  --like: #ff3040;
   --info: var(--gray-500);
 
   --ring: color-mix(in srgb, var(--lemon) 55%, transparent);
@@ -149,11 +152,33 @@
   --radius: 999px;
   --font: 'Manrope Variable', 'Manrope', system-ui, sans-serif;
   --font-display: 'Inter Tight Variable', 'Inter Tight', system-ui, sans-serif;
+
+  /* Page content sets this below 1 so more fits; chrome stays at 1. */
+  --canvas-scale: 1;
 }
 
 @layer base {
   html {
     font-family: var(--font-sans);
+  }
+
+  /* Sidebar and top bar sit outside main, so they keep the root scale. */
+  main {
+    --canvas-scale: 0.85;
+    --spacing: calc(0.25rem * var(--canvas-scale));
+    --text-xs: calc(0.75rem * var(--canvas-scale));
+    --text-sm: calc(0.875rem * var(--canvas-scale));
+    --text-base: calc(1rem * var(--canvas-scale));
+    --text-lg: calc(1.125rem * var(--canvas-scale));
+    --text-xl: calc(1.25rem * var(--canvas-scale));
+    --text-2xl: calc(1.5rem * var(--canvas-scale));
+    --text-3xl: calc(1.875rem * var(--canvas-scale));
+    --text-4xl: calc(2.25rem * var(--canvas-scale));
+    --text-5xl: calc(3rem * var(--canvas-scale));
+    --text-6xl: calc(3.75rem * var(--canvas-scale));
+    --text-7xl: calc(4.5rem * var(--canvas-scale));
+    --text-8xl: calc(6rem * var(--canvas-scale));
+    --text-9xl: calc(8rem * var(--canvas-scale));
   }
 
   body {
@@ -292,6 +317,23 @@
 
   .accent-marker {
     box-shadow: inset 3px 0 0 var(--accent);
+  }
+
+  @keyframes heart-like {
+    0% {
+      transform: scale(0.65);
+    }
+    45% {
+      transform: scale(1.22);
+    }
+    100% {
+      transform: scale(1);
+    }
+  }
+
+  .heart-like {
+    transform-origin: center;
+    animation: heart-like 380ms var(--ease-out);
   }
 
   @keyframes page-enter {
@@ -448,6 +490,7 @@
     .page-enter,
     .animate-in,
     .animate-out,
+    .heart-like,
     .dialog-motion[data-state='open'],
     .dialog-motion[data-state='closed'] {
       animation: none;
@@ -484,5 +527,75 @@
 
   [data-sonner-toast] [data-description] {
     color: var(--text-muted) !important;
+  }
+
+  main .label-overline {
+    font-size: calc(0.7rem * var(--canvas-scale));
+  }
+
+  main .text-display-lg {
+    font-size: clamp(
+      calc(1.75rem * var(--canvas-scale)),
+      calc((1.5rem + 0.8vw) * var(--canvas-scale)),
+      calc(2rem * var(--canvas-scale))
+    );
+  }
+
+  main .text-display-md {
+    font-size: clamp(
+      calc(1.25rem * var(--canvas-scale)),
+      calc((1.1rem + 0.5vw) * var(--canvas-scale)),
+      calc(1.5rem * var(--canvas-scale))
+    );
+  }
+
+  main .text-display-sm {
+    font-size: calc(1.125rem * var(--canvas-scale));
+  }
+
+  main .input-field {
+    min-height: calc(2.5rem * var(--canvas-scale));
+  }
+
+  @media (min-width: 481px) {
+    main .with-panel {
+      grid-template-columns: minmax(0, 1fr) calc(400px * var(--canvas-scale));
+    }
+  }
+
+  main .page-lead {
+    font-size: calc(14.5px * var(--canvas-scale));
+  }
+
+  main .task-title {
+    font-size: calc(14.5px * var(--canvas-scale));
+  }
+
+  main .task-meta {
+    font-size: calc(12px * var(--canvas-scale));
+  }
+
+  main .stat {
+    padding: calc(16px * var(--canvas-scale)) calc(18px * var(--canvas-scale));
+  }
+
+  main .stat b {
+    font-size: calc(26px * var(--canvas-scale));
+  }
+
+  main .stat span {
+    font-size: calc(12px * var(--canvas-scale));
+  }
+
+  main .group-h h2 {
+    font-size: calc(13px * var(--canvas-scale));
+  }
+
+  main .group-h span {
+    font-size: calc(12px * var(--canvas-scale));
+  }
+
+  main .schedule-chip {
+    font-size: calc(13px * var(--canvas-scale));
   }
 }

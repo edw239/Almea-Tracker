@@ -14,6 +14,8 @@ export const ErrorCode = {
   SPRINT_START_NEEDS_DUE: 'SPRINT_START_NEEDS_DUE',
   SPACE_KEY_INVALID: 'SPACE_KEY_INVALID',
   SPACE_KEY_TAKEN: 'SPACE_KEY_TAKEN',
+  PROJECT_CLOSED: 'PROJECT_CLOSED',
+  PROJECT_NOT_READY: 'PROJECT_NOT_READY',
   LABEL_MATCHES_BRAND: 'LABEL_MATCHES_BRAND',
   EPIC_INVALID: 'EPIC_INVALID',
   RANK_ORDER: 'RANK_ORDER',
@@ -56,5 +58,15 @@ export class AppError extends HttpException {
 
   static badRequest(message: string): AppError {
     return new AppError(ErrorCode.VALIDATION_FAILED, message, HttpStatus.BAD_REQUEST);
+  }
+
+  static projectClosed(message = 'Проект закрыт, связь задач заморожена'): AppError {
+    return new AppError(ErrorCode.PROJECT_CLOSED, message, HttpStatus.CONFLICT);
+  }
+
+  static projectNotReady(
+    message = 'Чтобы проект шёл в работе, нужны результат, целевая дата и руководитель',
+  ): AppError {
+    return new AppError(ErrorCode.PROJECT_NOT_READY, message, HttpStatus.BAD_REQUEST);
   }
 }

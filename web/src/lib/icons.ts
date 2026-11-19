@@ -61,6 +61,7 @@ import {
   Gauge as PhGauge,
   Gear,
   GraduationCap as PhGraduationCap,
+  Heart as PhHeart,
   Hourglass as PhHourglass,
   House,
   Image as PhImage,
@@ -193,6 +194,8 @@ export const Flag = adapt(PhFlag);
 export const Flame = adapt(PhFire);
 export const Folder = adapt(PhFolder);
 export const Gauge = adapt(PhGauge);
+export const Heart = adapt(PhHeart, 'regular');
+export const HeartFilled = adapt(PhHeart, 'fill');
 export const GraduationCap = adapt(PhGraduationCap);
 export const GripVertical = adapt(DotsSixVertical);
 export const History = adapt(ClockCounterClockwise);

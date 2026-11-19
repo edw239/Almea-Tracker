@@ -1,5 +1,6 @@
 import * as React from 'react'
 import * as DialogPrimitive from '@radix-ui/react-dialog'
+import { QUIET_ICON } from '../../lib/control-styles'
 import { X } from '../../lib/icons'
 import { cn } from '../../lib/utils'
 
@@ -41,11 +42,8 @@ const DialogContent = React.forwardRef<
     >
       {children}
       {showClose ? (
-        <DialogPrimitive.Close
-          className="absolute right-3 top-3 rounded-lg p-1 text-muted-foreground transition-colors hover:bg-inset hover:text-foreground focus-visible:outline-none focus-visible:shadow-[var(--focus-ring)]"
-          aria-label="Закрыть"
-        >
-          <X size={16} />
+        <DialogPrimitive.Close className={cn(QUIET_ICON, 'absolute right-3 top-3')} aria-label="Закрыть">
+          <X size={18} />
         </DialogPrimitive.Close>
       ) : null}
     </DialogPrimitive.Content>

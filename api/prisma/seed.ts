@@ -5,7 +5,9 @@ import {
   POSITION_STEP,
   SYSTEM_LIST_PERSONAL_INBOX,
   SYSTEM_SPACE_PERSONAL,
+  SYSTEM_SPACE_PROJECTS,
 } from '../src/common/constants';
+import { seedDisplayName } from '../src/identity/utils/seed-name';
 import { computeNextRunAt } from '../src/work-management/utils/schedule-timing.util';
 
 const prisma = new PrismaClient();
@@ -37,7 +39,11 @@ async function main() {
   if (!password || password.length < 8) {
     throw new Error('SEED_ADMIN_PASSWORD must be set and at least 8 characters');
   }
-  const name = process.env.SEED_ADMIN_NAME ?? 'Эдуард';
+  const configuredName = process.env.SEED_ADMIN_NAME;
+  const name = seedDisplayName(configuredName, 'Эдвард');
+  if (configuredName !== undefined && name !== configuredName.trim()) {
+    console.warn('SEED_ADMIN_NAME is not readable text; using the default name');
+  }
 
   const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
   const user = await prisma.user.upsert({
@@ -107,6 +113,19 @@ async function main() {
   const strategyInProgress = await prisma.taskListStatus.findFirst({
     where: { listId: strategy.id, category: TaskStatus.IN_PROGRESS },
   });
+
+  const projects = await prisma.taskSpace.upsert({
+    where: { systemKey: SYSTEM_SPACE_PROJECTS },
+    update: {},
+    create: {
+      name: 'Координация проектов',
+      description: 'Решения и вехи. Исполнение остаётся в пространствах процессов.',
+      isSystem: true,
+      systemKey: SYSTEM_SPACE_PROJECTS,
+      key: 'PRJ',
+    },
+  });
+  await seedStatuses(projects.id, null);
 
   await prisma.taskSpace.upsert({
     where: { systemKey: 'host' },
@@ -256,7 +275,10 @@ async function seedProjectManager(opsSpaceId: string) {
   if (!email || !password || password.length < 8) {
     return;
   }
-  const name = process.env.SEED_PM_NAME ?? 'Проджект';
+  const name = seedDisplayName(process.env.SEED_PM_NAME, 'Проджект');
+  if (process.env.SEED_PM_NAME !== undefined && name !== process.env.SEED_PM_NAME.trim()) {
+    console.warn('SEED_PM_NAME is not readable text; using the default name');
+  }
   const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
   const manager = await prisma.user.upsert({
     where: { email },

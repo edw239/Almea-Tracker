@@ -75,6 +75,14 @@ export type SummaryDayBounds = {
   weekEnd: Date;
 };
 
+/** Calendar YYYY-MM-DD in `timeZone`, for date-only comparisons. */
+export function zonedCalendarDate(now: Date, timeZone: string): string {
+  const parts = zonedParts(now, timeZone);
+  const month = String(parts.month).padStart(2, '0');
+  const day = String(parts.day).padStart(2, '0');
+  return `${parts.year}-${month}-${day}`;
+}
+
 export function summaryDayBounds(now: Date, timeZone: string): SummaryDayBounds {
   const todayStart = startOfZonedDay(now, timeZone, 0);
   const tomorrowStart = startOfZonedDay(now, timeZone, 1);

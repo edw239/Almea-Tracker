@@ -56,12 +56,14 @@ describe('TaskTemplatesService.expandIntoList', () => {
       nextRank: jest.fn().mockResolvedValue('V'),
     };
     const taskStatus = { commit: jest.fn().mockResolvedValue(new Date()) };
+    const projects = { resolveLink: jest.fn().mockResolvedValue(null) };
     const service = new TaskTemplatesService(
       prisma as never,
       spaces as never,
       statuses as never,
       identity as never,
       taskStatus as never,
+      projects as never,
     );
     const result = await service.expandIntoList(
       { id: 'u1', role: UserRole.MEMBER, email: 'a@b.c', name: 'A', mustChangePassword: false },

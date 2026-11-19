@@ -1,6 +1,6 @@
 import { AppError } from '../../common/errors';
 import { decodeCursor, encodeCursor } from './task-cursor.util';
-import { parseFilters, validateFilterGroup } from './task-filter.util';
+import { filtersToPrisma, parseFilters, validateFilterGroup } from './task-filter.util';
 
 describe('task-cursor.util', () => {
   it('round-trips cursor', () => {
@@ -29,6 +29,18 @@ describe('task-filter.util', () => {
       ],
     });
     expect(group.op).toBe('AND');
+  });
+
+  it('maps project_id onto projectId', () => {
+    const where = filtersToPrisma(
+      validateFilterGroup({
+        op: 'AND',
+        children: [{ field: 'project_id', operator: 'is', value: '11111111-1111-4111-8111-111111111111' }],
+      }),
+    );
+    expect(where).toEqual({
+      AND: [{ projectId: '11111111-1111-4111-8111-111111111111' }],
+    });
   });
 
   it('rejects unknown field', () => {

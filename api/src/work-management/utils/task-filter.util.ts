@@ -10,6 +10,7 @@ export const FILTER_FIELDS = [
   'list_status_id',
   'task_type_id',
   'host_entity_id',
+  'project_id',
   'list_id',
   'updated_at',
   'key',
@@ -54,6 +55,7 @@ const FIELD_OPS: Record<FilterField, FilterOperator[]> = {
   due_date: ['is_set', 'is_not_set', 'gt', 'lt', 'between'],
   task_type_id: ['is', 'is_not', 'is_set', 'is_not_set'],
   host_entity_id: ['is', 'is_not', 'is_set', 'is_not_set'],
+  project_id: ['is', 'is_not', 'is_set', 'is_not_set'],
   list_id: ['is', 'is_not'],
   updated_at: ['is_set', 'is_not_set', 'gt', 'lt', 'between'],
   key: ['is'],
@@ -156,7 +158,7 @@ function dateCondition(field: 'dueDate' | 'updatedAt', condition: FilterConditio
 }
 
 function idCondition(
-  field: 'taskTypeId' | 'hostEntityId' | 'epicId' | 'sprintId',
+  field: 'taskTypeId' | 'hostEntityId' | 'projectId' | 'epicId' | 'sprintId',
   condition: FilterCondition,
 ): Record<string, unknown> {
   if (condition.operator === 'is_set') return { [field]: { not: null } };
@@ -193,6 +195,8 @@ function conditionToPrisma(condition: FilterCondition): Record<string, unknown> 
       return idCondition('taskTypeId', condition);
     case 'host_entity_id':
       return idCondition('hostEntityId', condition);
+    case 'project_id':
+      return idCondition('projectId', condition);
     case 'epic_id':
       return idCondition('epicId', condition);
     case 'sprint_id':

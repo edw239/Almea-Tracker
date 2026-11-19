@@ -115,7 +115,17 @@ Cookie: httpOnly, SameSite=Lax, path `/`, Secure в `NODE_ENV=production`.
 - `POST /api/host/entity-lists/ensure` — `{ entityType, entityId, name, spaceId? }` → list + upsert в реестр
 - `GET /api/host/entities/:entityType/:entityId` — legacy deep-link; UUID brand → тот же bundle, что карточка
 
-Типы: `brand|batch|deal|project`. В UI v1 только `brand` (`HOST_ENTITY_TYPES_VISIBLE`). System space: `host`. На задаче: `hostEntityId` + denormalized `domainEntity*`.
+Типы: `brand|batch|deal|project`. В UI v1 только `brand` (`HOST_ENTITY_TYPES_VISIBLE`). System space: `host`. На задаче: `hostEntityId` + denormalized `domainEntity*`. Значение `project` в этом enum не используется: обязательство со сроком — отдельная сущность ниже.
+
+### Projects
+
+- `GET /api/projects?query=&includeClosed=` — портфель. Сигнал считается: срок прошёл → red, меньше 7 дней и есть открытые задачи → amber, иначе green. Закрытые без сигнала.
+- `POST /api/projects` — черновик с одним именем. `ACTIVE` и `ON_HOLD` требуют результат, целевую дату и руководителя. Дубль имени → 409.
+- `GET/PATCH /api/projects/:id` — карточка и правка. Закрытый проект не патчится.
+- `POST /api/projects/:id/close` — `{ closeNote }`. Новые и снятые связи задач → 409 `PROJECT_CLOSED`.
+- `POST /api/projects/:id/reopen` — снова `ACTIVE`, если результат, дата и руководитель на месте.
+- Задача: `projectId` рядом с брендом. Список координации создаётся в system space `projects`; задача в нём всегда принадлежит этому проекту.
+- Создаёт и закрывает `GLOBAL_ADMIN` или `PROJECT_MANAGER`. Остальные видят проект, если участвуют или видят хотя бы одну его задачу.
 
 ### Views / favorites
 

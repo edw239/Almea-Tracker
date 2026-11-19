@@ -1,6 +1,7 @@
 import { Link, useParams } from 'react-router-dom'
 import { EmptyState } from '../components/EmptyState'
 import { PageHeader } from '../components/PageHeader'
+import { FavoriteButton } from '../components/QuietControls'
 import { CardSkeleton } from '../components/ui/Skeleton'
 import { Folder } from '../lib/icons'
 import { useStore } from '../store'
@@ -73,12 +74,16 @@ function ListCard({ listId, name }: { listId: string; name: string }) {
   ).length
   const starred = store.favorites.some((item) => item.entityType === 'TASK_LIST' && item.entityId === listId)
   return (
-    <Link to={`/lists/${listId}`} className="surface-card block rounded p-4 transition-colors hover:bg-elevated">
-      <h3 className="font-medium text-foreground">{name}</h3>
-      <p className="mt-1 text-sm text-muted-foreground">{open} открытых</p>
-      <span className="mt-2 inline-block text-xs text-subtle-foreground">
-        {starred ? 'в избранном' : 'открыть'}
-      </span>
-    </Link>
+    <div className="surface-card relative rounded transition-colors hover:bg-elevated">
+      <Link to={`/lists/${listId}`} className="block p-4 pr-12">
+        <h3 className="font-medium text-foreground">{name}</h3>
+        <p className="mt-1 text-sm text-muted-foreground">{open} открытых</p>
+      </Link>
+      <FavoriteButton
+        active={starred}
+        className="absolute right-2 top-2"
+        onClick={() => void store.toggleFavorite('TASK_LIST', listId)}
+      />
+    </div>
   )
 }

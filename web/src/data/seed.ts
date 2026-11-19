@@ -49,6 +49,7 @@ function task(
     | 'domainEntityId'
     | 'domainEntityType'
     | 'hostEntityId'
+    | 'projectId'
     | 'reviewRequired'
     | 'submittedAt'
     | 'createdByUserId'
@@ -64,6 +65,7 @@ function task(
     domainEntityId: null,
     domainEntityType: null,
     hostEntityId: null,
+    projectId: null,
     reviewRequired: false,
     submittedAt: null,
     createdByUserId: partial.ownerUserId,

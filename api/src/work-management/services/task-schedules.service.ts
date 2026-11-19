@@ -18,6 +18,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { TaskSpaceAccessService } from '../access/task-space-access.service';
 import { computeNextRunAt, schedulePeriodKey } from '../utils/schedule-timing.util';
 import { nextPosition } from '../utils/task-position.util';
+import { ProjectsService } from './projects.service';
 import { TaskListStatusesService } from './task-list-statuses.service';
 import { TaskTemplatesService } from './task-templates.service';
 import { TaskIdentityService } from './task-identity.service';
@@ -58,6 +59,7 @@ export class TaskSchedulesService {
     private readonly templates: TaskTemplatesService,
     private readonly identity: TaskIdentityService,
     private readonly taskStatus: TaskStatusService,
+    private readonly projects: ProjectsService,
   ) {}
 
   async listForList(user: AuthUser, listId: string) {
@@ -319,6 +321,12 @@ export class TaskSchedulesService {
       const key = await this.identity.nextKey(tx, list.spaceId);
       const rank = await this.identity.nextRank(tx);
       const at = new Date();
+      const linked = await this.projects.resolveLink(tx, {
+        mode: 'create',
+        listId: schedule.listId,
+        currentProjectId: null,
+        requested: undefined,
+      });
       const created = await tx.task.create({
         data: {
           listId: schedule.listId,
@@ -333,6 +341,7 @@ export class TaskSchedulesService {
           key,
           rank,
           statusChangedAt: at,
+          projectId: linked ?? null,
           assignees: { create: { userId: assigneeUserId } },
         },
       });

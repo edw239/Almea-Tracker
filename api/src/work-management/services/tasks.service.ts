@@ -24,6 +24,7 @@ import {
 import { isInReviewColumn, resolveReviewRequired } from '../utils/task-review.util';
 import { TaskCollabService } from './task-collab.service';
 import { HostEntitiesService } from './host-entities.service';
+import { ProjectsService } from './projects.service';
 import { TaskListStatusesService } from './task-list-statuses.service';
 import { TaskNotificationsService } from './task-notifications.service';
 import { TaskIdentityService } from './task-identity.service';
@@ -40,6 +41,7 @@ type CreateInput = {
   reviewRequired?: boolean;
   parentTaskId?: string;
   hostEntityId?: string | null;
+  projectId?: string | null;
   listStatusId?: string;
   taskTypeId?: string | null;
   epicId?: string | null;
@@ -62,6 +64,7 @@ type UpdateInput = {
   domainEntityType?: string | null;
   domainLabel?: string | null;
   hostEntityId?: string | null;
+  projectId?: string | null;
   taskTypeId?: string | null;
   epicId?: string | null;
   storyPoints?: number | null;
@@ -103,6 +106,7 @@ export class TasksService {
     private readonly collab: TaskCollabService,
     private readonly notifications: TaskNotificationsService,
     private readonly hostEntities: HostEntitiesService,
+    private readonly projects: ProjectsService,
     private readonly identity: TaskIdentityService,
     private readonly taskStatus: TaskStatusService,
     private readonly sprints: SprintsService,
@@ -304,6 +308,12 @@ export class TasksService {
       const rank = await this.identity.nextRank(tx);
       const at = new Date();
       const status = chosen?.category ?? TaskStatus.OPEN;
+      const projectId = await this.projects.resolveLink(tx, {
+        mode: 'create',
+        listId,
+        currentProjectId: null,
+        requested: input.projectId,
+      });
       const created = await tx.task.create({
         data: {
           listId,
@@ -323,6 +333,7 @@ export class TasksService {
           statusChangedAt: at,
           epicId,
           taskTypeId: input.taskTypeId ?? null,
+          projectId: projectId ?? null,
           storyPoints: input.storyPoints ?? null,
           sprintId: input.sprintId ?? null,
           assignees:
@@ -411,6 +422,12 @@ export class TasksService {
           ? null
           : await this.resolveHostEntityLink(input.hostEntityId);
     const updated = await this.prisma.$transaction(async (tx) => {
+      const projectId = await this.projects.resolveLink(tx, {
+        mode: 'update',
+        listId: task.listId,
+        currentProjectId: task.projectId,
+        requested: input.projectId,
+      });
       if (input.epicId !== undefined) {
         await this.assertEpicTarget(tx, {
           taskId,
@@ -543,6 +560,7 @@ export class TasksService {
                 ? hostLink.name
                 : null,
           hostEntityId: hostLink === undefined ? undefined : hostLink ? hostLink.id : null,
+          ...(projectId !== undefined ? { projectId } : {}),
         },
         include: { assignees: true, checklist: true },
       });
@@ -668,6 +686,9 @@ export class TasksService {
         );
       }
       let key: string | undefined;
+      const movedProjectId = listChanged
+        ? await this.projects.projectIdAfterListMove(tx, task.projectId, targetListId)
+        : undefined;
       if (listChanged) {
         const targetList = await tx.taskList.findUniqueOrThrow({
           where: { id: targetListId },
@@ -760,6 +781,7 @@ export class TasksService {
           ...(input.hostEntityId !== undefined
             ? await this.hostPatch(input.hostEntityId)
             : {}),
+          ...(movedProjectId !== undefined ? { projectId: movedProjectId } : {}),
         },
         include: { assignees: true },
       });

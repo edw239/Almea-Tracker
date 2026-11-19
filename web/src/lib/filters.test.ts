@@ -19,6 +19,7 @@ describe('buildListFilters', () => {
       priority: 'HIGH',
       assigneeId: 'u1',
       title: 'KPI',
+      projectId: 'p1',
     })
     expect(raw).toBeTruthy()
     const parsed = JSON.parse(raw!) as {
@@ -31,8 +32,9 @@ describe('buildListFilters', () => {
       { field: 'priority', operator: 'is', value: 'HIGH' },
       { field: 'assignee_id', operator: 'is', value: 'u1' },
       { field: 'title', operator: 'contains', value: 'KPI' },
+      { field: 'project_id', operator: 'is', value: 'p1' },
     ])
-    expect(hasActiveFilters({ status: 'OPEN', priority: '', assigneeId: '', title: '' })).toBe(true)
+    expect(hasActiveFilters({ status: 'OPEN', priority: '', assigneeId: '', title: '', projectId: '' })).toBe(true)
   })
 })
 
@@ -43,9 +45,10 @@ describe('parseFiltersToDraft / filtersToQuery', () => {
       priority: '',
       assigneeId: '',
       title: 'lab',
+      projectId: '',
     })
     const draft = parseFiltersToDraft(raw)
-    expect(draft).toEqual({ status: 'DONE', priority: '', assigneeId: '', title: 'lab' })
+    expect(draft).toEqual({ status: 'DONE', priority: '', assigneeId: '', title: 'lab', projectId: '' })
     expect(filtersToQuery(JSON.parse(raw!))).toBe(raw)
   })
 })

@@ -52,7 +52,7 @@ export function IssueCardFace({
         : undefined
   return (
     <>
-      <div className="mb-1 flex items-center gap-2 text-[11px] text-muted-foreground">
+      <div className="mb-1 flex items-center gap-2 text-xs text-muted-foreground">
         {tint ? <span className={cn('h-2 w-2 rounded-full', tint)} /> : null}
         {face.taskTypeColor ? (
           <span className="h-2 w-2 rounded-full" style={{ background: face.taskTypeColor }} />

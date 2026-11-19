@@ -60,6 +60,7 @@ type Action =
   | { type: 'SET_NOTIFICATIONS'; notifications: Notification[] }
   | { type: 'PATCH_NOTIFICATION'; id: string; patch: Partial<Notification> }
   | { type: 'SET_SUMMARY'; summary: MeSummary | null }
+  | { type: 'SET_SPACES'; spaces: DemoState['spaces']; folders: DemoState['folders']; lists: DemoState['lists'] }
 
 type StoreState = DemoState & {
   ready: boolean
@@ -114,6 +115,8 @@ function reducer(state: StoreState, action: Action): StoreState {
       }
     case 'SET_SUMMARY':
       return { ...state, summary: action.summary }
+    case 'SET_SPACES':
+      return { ...state, spaces: action.spaces, folders: action.folders, lists: action.lists }
     default:
       return state
   }
@@ -139,9 +142,10 @@ type StoreValue = StoreState & {
       title: string
       assigneeIds?: string[]
       dueDate?: string | null
-      hostEntityId?: string | null
-    },
-  ) => Promise<Task>
+        hostEntityId?: string | null
+        projectId?: string | null
+      },
+    ) => Promise<Task>
   patchTask: (taskId: string, patch: TaskPatch) => Promise<void>
   markStuck: (taskId: string, reason: string) => Promise<void>
   clearStuck: (taskId: string) => Promise<void>
@@ -156,6 +160,7 @@ type StoreValue = StoreState & {
   bulkUpdate: (taskIds: string[], patch: Omit<TaskPatch, 'title' | 'description' | 'dueDate'>) => Promise<void>
   loadNotifications: () => Promise<void>
   loadSummary: () => Promise<void>
+  reloadSpaces: () => Promise<void>
   markNotificationRead: (id: string) => Promise<void>
   markAllNotificationsRead: () => Promise<void>
   snoozeNotification: (id: string) => Promise<void>
@@ -343,6 +348,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         assigneeIds?: string[]
         dueDate?: string | null
         hostEntityId?: string | null
+        projectId?: string | null
       },
     ) => {
       const created = mapApiTask(await api.createTask(listId, input))
@@ -590,6 +596,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
+  const reloadSpaces = useCallback(async () => {
+    const spaces = await api.spaces()
+    const tree = flattenSpaces(spaces)
+    dispatch({ type: 'SET_SPACES', spaces: tree.spaces, folders: tree.folders, lists: tree.lists })
+  }, [])
+
   const markNotificationRead = useCallback(
     async (id: string) => {
       dispatch({ type: 'PATCH_NOTIFICATION', id, patch: { read: true } })
@@ -674,6 +686,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       bulkUpdate,
       loadNotifications,
       loadSummary,
+      reloadSpaces,
       markNotificationRead,
       markAllNotificationsRead,
       snoozeNotification,
@@ -692,6 +705,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       loadMyWork,
       loadMyWorkBuckets,
       loadSummary,
+      reloadSpaces,
       markAllNotificationsRead,
       markNotificationRead,
       markStuck,

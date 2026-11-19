@@ -39,6 +39,8 @@ import { TasksController } from './tasks.controller';
 import { TaskViewsController } from './task-views.controller';
 import { OverviewController } from './overview.controller';
 import { OverviewService } from './services/overview.service';
+import { ProjectsController } from './projects.controller';
+import { ProjectsService } from './services/projects.service';
 
 @Module({
   imports: [ScheduleModule.forRoot()],
@@ -59,6 +61,7 @@ import { OverviewService } from './services/overview.service';
     ColleagueController,
     HostEntitiesController,
     OverviewController,
+    ProjectsController,
   ],
   providers: [
     TaskSpaceAccessService,
@@ -86,6 +89,7 @@ import { OverviewService } from './services/overview.service';
     ColleagueService,
     HostEntitiesService,
     OverviewService,
+    ProjectsService,
   ],
   exports: [TaskListResolverService, TaskHostService, HostEntitiesService],
 })
